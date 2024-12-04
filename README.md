@@ -6,7 +6,7 @@ The SONUS Vitesse Python API is a high-performance interface designed to integra
 
 ## Table of Contents
 1. [Introduction](#introduction)
-2. [Setup and Initialization](#setup-and-initialization)
+2. [Setup and Initialisation](#setup-and-initialisation)
 3. [Function Descriptions](#function-descriptions)
    - [Initialise](#initialise)
    - [Change_Symbol](#change_symbol)
@@ -24,11 +24,11 @@ The SONUS Vitesse Python API is a high-performance interface designed to integra
 
 ## Introduction
 
-The SONUS Vitesse Python API allows users to directly interact with the SONUS Vitesse data acquisition system for customized data manipulation. It provides high-speed functionality for configuring channels, setting parameters, and retrieving processed data in Python for further analysis.
+The SONUS Vitesse Python API allows users to directly interact with the SONUS Vitesse data acquisition system for customised data manipulation. It provides high-speed functionality for configuring channels, setting parameters, and retrieving processed data in Python for further analysis.
 
 ---
 
-## Setup and Initialization
+## Setup and Initialisation
 
 To use this API, ensure the following:
 1. Python is installed on your system.
@@ -40,13 +40,18 @@ To use this API, ensure the following:
 ## Function Descriptions
 
 ### Initialise
-Initializes the SONUS Vitesse device using its serial number. If the system is not Windows, it removes conflicting drivers.
+Initialises the SONUS Vitesse device using its serial number. If the system is not Windows, it removes conflicting drivers.
 
 **Parameters**:
 - `serial_number` (string): Serial number of the device.
 
 **Returns**:
 - `spiDevice` object.
+
+**Example:**
+'''python
+spiDevice = Vitesse.Initialise('serial_number')
+'''
 
 ---
 
@@ -57,6 +62,11 @@ Configures the device symbol parameters.
 - `spiDevice`: Device object returned by `Initialise`.
 - `num_chips`: Number of chips to be set.
 - `num_cycles`: Number of cycles for the symbol.
+
+**Example:**
+'''python
+Vitesse.Change_Symbol(spiDevice, 4, 8)
+'''
 
 ---
 
@@ -71,6 +81,11 @@ Activates specific channels on the device.
 - `numChannelsOn` (int): Number of active channels.
 - `numChannelsOnArray` (list): List of indices of active channels.
 
+**Example:**
+'''python
+numChannelsOn, numChannelsOnArray = Vitesse.Channel_Enable(spiDevice, [1, 0, 1, 0, 1, 0, 0, 1])
+'''
+
 ---
 
 ### Change_Averages
@@ -79,6 +94,11 @@ Configures the number of averaging cycles.
 **Parameters**:
 - `spiDevice`: Device object returned by `Initialise`.
 - `num_averages`: Integer representing the number of averages.
+
+**Example:**
+'''python
+Vitesse.Change_Averages(spiDevice, 16)
+'''
 
 ---
 
@@ -90,6 +110,11 @@ Sets the Pulse Repetition Frequency (PRF).
 - `PRF`: Desired PRF in Hz.
 - `adcFreq`: ADC clock frequency in Hz.
 
+**Example:**
+'''python
+Vitesse.Change_PRF(spiDevice, 1000, 30e6)
+'''
+
 ---
 
 ### ADC_Threshold
@@ -97,8 +122,13 @@ Sets the ADC threshold and trigger mode.
 
 **Parameters**:
 - `spiDevice`: Device object returned by `Initialise`.
-- `threshold_level`: Integer representing the threshold level.
+- `threshold_level`: Integer representing the threshold level (0 or 1).
 - `trigger`: Trigger mode (e.g., 0 for off, 1 for on).
+
+**Example:**
+'''python
+Vitesse.ADC_Threshold(spiDevice, 0, 0)
+'''
 
 ---
 
@@ -113,6 +143,11 @@ Configures the length of the data recording.
 **Returns**:
 - `recordPoints` (int): Total number of data points recorded.
 
+**Example:**
+'''python
+recordPoints = Vitesse.Change_Record_Length(spiDevice, 100e-6, 30e6)
+'''
+
 ---
 
 ### Trigger_Phasing
@@ -123,6 +158,11 @@ Sets the trigger phasing for the channels.
 - `phaseArrayMicro`: List of phase values in microseconds for each channel.
 - `adcFreq`: ADC clock frequency in Hz.
 
+**Example:**
+'''python
+Vitesse.Trigger_Phasing(spiDevice, [5, 3.2, 1, 0, 0, 0, 8, 0.5], 30e6)
+'''
+
 ---
 
 ### Record_Delay
@@ -132,6 +172,11 @@ Configures recording delays for each channel.
 - `spiDevice`: Device object returned by `Initialise`.
 - `delayArrayMicro`: List of delay values in microseconds for each channel.
 - `adcFreq`: ADC clock frequency in Hz.
+
+**Example:**
+'''python
+Vitesse.Record_Delay(spiDevice, [5, 3.2, 1, 0, 0, 0, 8, 0.5], 30e6)
+'''
 
 ---
 
@@ -147,7 +192,12 @@ Acquires the processed signal array from the device.
 - `PRF`: Pulse Repetition Frequency in Hz.
 
 **Returns**:
-- `echosig` (array): Normalized and processed signal array.
+- `echosig` (array): Normalised and processed signal array.
+
+**Example:**
+'''python
+data = Vitesse.Get_Array(spiDevice, 100, 8, [0, 1, 2, 3, 4, 5, 6, 7], 1000, 1000)
+'''
 
 ---
 
@@ -157,7 +207,69 @@ Closes the SPI connection with the device and clears the read buffer.
 **Parameters**:
 - `spiDevice`: Device object returned by `Initialise`.
 
+**Example:**
+'''python
+Vitesse.Close_Device(spiDevice)
+'''
+
 ---
 
-This API is designed for advanced users familiar with signal processing and hardware configurations. For additional support or queries, please contact Sonobotics.
+## Example Usage
+'''python
+from Vitesse_API_S import Vitesse
 
+serial_number = 'AB'
+
+spiDevice = Vitesse.Initialise(serial_number)
+
+# signal parameters
+
+num_averages = 100
+num_chips = 7
+num_cycles = 2
+adcFreq = 50e6
+recordLength = 25e-6
+PRF = 5000
+threshold_level = 0
+trigger = 0
+channelsOnArray = [0, 0, 0, 0, 0, 0, 0, 1] # channels on
+phaseArrayMicro = [0, 0, 0, 0, 0, 0, 0, 0] # phasing in microseconds
+delayArrayMicro = [0, 0, 0, 0, 0, 0, 0, 0] # delay in microseconds
+
+Vitesse.Change_Symbol(spiDevice, num_chips, num_cycles)
+numChannelsOn, numChannelsOnArray = Vitesse.Channel_Enable(spiDevice, channelsOnArray)
+Vitesse.Change_Averages(spiDevice, num_averages)
+Vitesse.Change_PRF(spiDevice, PRF, adcFreq)
+Vitesse.ADC_Threshold(spiDevice, threshold_level, trigger)
+recordPoints = Vitesse.Change_Record_Length(spiDevice, recordLength, adcFreq)
+Vitesse.Trigger_Phasing(spiDevice, phaseArrayMicro, adcFreq)
+Vitesse.Record_Delay(spiDevice, delayArrayMicro, adcFreq)
+print('')
+
+# acquisition loop
+
+count = 0
+
+try:
+    while True:
+        count += 1
+        array = Vitesse.Get_Array(spiDevice, num_averages, numChannelsOn, numChannelsOnArray, recordPoints, PRF)
+        array = array.flatten()
+        print('Signal (',count,'): ', array)
+
+except KeyboardInterrupt:
+    print('')
+    print('Ctrl + C pressed!')
+    print('')
+
+finally:
+    Vitesse.Channel_Enable(spiDevice, [0,0,0,0,0,0,0,0])
+    Vitesse.Close_Device(spiDevice)
+    print('')
+    print('Device Closed!')
+'''
+
+---
+
+## Conclusion
+This API provides a robust and efficient interface for interacting with the SONUS Vitesse system. With a focus on configurability and high-speed data handling, it is an essential tool for advanced signal acquisition and processing tasks.

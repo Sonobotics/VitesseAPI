@@ -1,4 +1,3 @@
-import matplotlib.pyplot as plt
 from Vitesse_API_S import Vitesse
 
 serial_number = 'AB'
