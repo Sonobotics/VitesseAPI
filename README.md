@@ -49,9 +49,9 @@ Initialises the SONUS Vitesse device using its serial number. If the system is n
 - `spiDevice` object.
 
 **Example:**
-'''python
+```python
 spiDevice = Vitesse.Initialise('serial_number')
-'''
+```
 
 ---
 
@@ -64,9 +64,9 @@ Configures the device symbol parameters.
 - `num_cycles`: Number of cycles for the symbol.
 
 **Example:**
-'''python
+```python
 Vitesse.Change_Symbol(spiDevice, 4, 8)
-'''
+```
 
 ---
 
@@ -82,9 +82,9 @@ Activates specific channels on the device.
 - `numChannelsOnArray` (list): List of indices of active channels.
 
 **Example:**
-'''python
+```python
 numChannelsOn, numChannelsOnArray = Vitesse.Channel_Enable(spiDevice, [1, 0, 1, 0, 1, 0, 0, 1])
-'''
+```
 
 ---
 
@@ -96,9 +96,9 @@ Configures the number of averaging cycles.
 - `num_averages`: Integer representing the number of averages.
 
 **Example:**
-'''python
+```python
 Vitesse.Change_Averages(spiDevice, 16)
-'''
+```
 
 ---
 
@@ -111,9 +111,9 @@ Sets the Pulse Repetition Frequency (PRF).
 - `adcFreq`: ADC clock frequency in Hz.
 
 **Example:**
-'''python
+```python
 Vitesse.Change_PRF(spiDevice, 1000, 30e6)
-'''
+```
 
 ---
 
@@ -126,9 +126,9 @@ Sets the ADC threshold and trigger mode.
 - `trigger`: Trigger mode (e.g., 0 for off, 1 for on).
 
 **Example:**
-'''python
+```python
 Vitesse.ADC_Threshold(spiDevice, 0, 0)
-'''
+```
 
 ---
 
@@ -144,9 +144,9 @@ Configures the length of the data recording.
 - `recordPoints` (int): Total number of data points recorded.
 
 **Example:**
-'''python
+```python
 recordPoints = Vitesse.Change_Record_Length(spiDevice, 100e-6, 30e6)
-'''
+```
 
 ---
 
@@ -159,9 +159,9 @@ Sets the trigger phasing for the channels.
 - `adcFreq`: ADC clock frequency in Hz.
 
 **Example:**
-'''python
+```python
 Vitesse.Trigger_Phasing(spiDevice, [5, 3.2, 1, 0, 0, 0, 8, 0.5], 30e6)
-'''
+```
 
 ---
 
@@ -174,9 +174,9 @@ Configures recording delays for each channel.
 - `adcFreq`: ADC clock frequency in Hz.
 
 **Example:**
-'''python
+```python
 Vitesse.Record_Delay(spiDevice, [5, 3.2, 1, 0, 0, 0, 8, 0.5], 30e6)
-'''
+```
 
 ---
 
@@ -195,9 +195,9 @@ Acquires the processed signal array from the device.
 - `echosig` (array): Normalised and processed signal array.
 
 **Example:**
-'''python
+```python
 data = Vitesse.Get_Array(spiDevice, 100, 8, [0, 1, 2, 3, 4, 5, 6, 7], 1000, 1000)
-'''
+```
 
 ---
 
@@ -208,14 +208,14 @@ Closes the SPI connection with the device and clears the read buffer.
 - `spiDevice`: Device object returned by `Initialise`.
 
 **Example:**
-'''python
+```python
 Vitesse.Close_Device(spiDevice)
-'''
+```
 
 ---
 
 ## Example Usage
-'''python
+```python
 from Vitesse_API_S import Vitesse
 
 serial_number = 'AB'
@@ -267,7 +267,7 @@ finally:
     Vitesse.Close_Device(spiDevice)
     print('')
     print('Device Closed!')
-'''
+```
 
 ---
 
