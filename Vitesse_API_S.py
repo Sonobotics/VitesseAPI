@@ -6,23 +6,24 @@ import numpy as np
 
 # message parameters
 
-readDelay = 500e-6
-msgBytes = 3
-threshold_level = 0
-trigger = 0
+READ_DELAY = 500e-6
+MSG_BYTES = 3
+THRESHOLD_LEVEL = 0
+TRIGGER = 0
+ADC_FREQ = 50e6
 
 class Vitesse:
     def Initialise(serial_number):
         if sys.platform.startswith("win") == False:
             os.system('sudo rmmod ftdi_sio 2>/dev/null')
 
-        if serial_number[-1] == 'A':
+        if serial_number[-1] != 'B':
             print('Serial number ends in wrong character!')
             sys.exit(0)
             
         spiDevice = sbftdi.ftdiChannel("SPI", "serialNum", serial_number.encode())
 
-        Vitesse.ADC_Threshold(spiDevice, threshold_level, trigger)
+        Vitesse.ADC_Threshold(spiDevice, THRESHOLD_LEVEL, TRIGGER)
 
         return spiDevice
 
@@ -35,7 +36,7 @@ class Vitesse:
         symbolByt = bytes.fromhex(symbolStr)
 
         spiDevice.write(symbolByt)
-        time.sleep(readDelay)
+        time.sleep(READ_DELAY)
         dataBack = spiDevice.read(1)
         result = int.from_bytes(dataBack, byteorder='big')
         message = 'Pass!' if result == 50 else 'Invalid!' if result == 200 else 'Fail!'
@@ -48,71 +49,84 @@ class Vitesse:
         numChannelsOn = np.count_nonzero(reversedChannelsOnArray)
         numChannelsOnArray = [index for index, value in enumerate(reversedChannelsOnArray) if value == 1]
 
-        channel = ['2', 'a', 'a', 'a']
-        channelStr = f'{ord(channel[0]):02x}{channelByte:02x}{ord(channel[1]):02x}{ord(channel[2]):02x}{ord(channel[3]):02x}'
-        channelByt = bytes.fromhex(channelStr)
+        if numChannelsOn > 8:
+            print('Maximum number of channels exceeded!')
+        else:
+            channel = ['2', 'a', 'a', 'a']
+            channelStr = f'{ord(channel[0]):02x}{channelByte:02x}{ord(channel[1]):02x}{ord(channel[2]):02x}{ord(channel[3]):02x}'
+            channelByt = bytes.fromhex(channelStr)
 
-        spiDevice.write(channelByt)
-        time.sleep(readDelay)
-        dataBack = spiDevice.read(1)
-        result = int.from_bytes(dataBack, byteorder='big')
-        message = 'Pass!' if result == 50 else 'Invalid!' if result == 200 else 'Fail!'
-        if message == 'Fail!': print(f'Channel: {message}')
+            spiDevice.write(channelByt)
+            time.sleep(READ_DELAY)
+            dataBack = spiDevice.read(1)
+            result = int.from_bytes(dataBack, byteorder='big')
+            message = 'Pass!' if result == 50 else 'Invalid!' if result == 200 else 'Fail!'
+            if message == 'Fail!': print(f'Channel: {message}')
 
         return numChannelsOn, numChannelsOnArray
 
     def Change_Averages(spiDevice, num_averages):
-        bitAveVals = np.binary_repr(num_averages, width=16)
-        numAveByte1 = int(bitAveVals[-8:],2)
-        numAveByte2 = int(bitAveVals[-16:-8],2)
+        if num_averages > 1000:
+            print('Maximum number of averages exceeded!')
+        elif num_averages < 1:
+            print('Number of averages too low!')
+        else:
+            bitAveVals = np.binary_repr(num_averages, width=16)
+            numAveByte1 = int(bitAveVals[-8:],2)
+            numAveByte2 = int(bitAveVals[-16:-8],2)
 
-        average = ['3', 'a', 'a']
-        averageStr = f'{ord(average[0]):02x}{numAveByte1:02x}{numAveByte2:02x}{ord(average[1]):02x}{ord(average[2]):02x}'
-        averageByt = bytes.fromhex(averageStr)
+            average = ['3', 'a', 'a']
+            averageStr = f'{ord(average[0]):02x}{numAveByte1:02x}{numAveByte2:02x}{ord(average[1]):02x}{ord(average[2]):02x}'
+            averageByt = bytes.fromhex(averageStr)
 
-        spiDevice.write(averageByt)
-        time.sleep(readDelay)
-        dataBack = spiDevice.read(1)
-        result = int.from_bytes(dataBack, byteorder='big')
-        message = 'Pass!' if result == 50 else 'Invalid!' if result == 200 else 'Fail!'
-        if message == 'Fail!': print(f'Averages: {message}') 
+            spiDevice.write(averageByt)
+            time.sleep(READ_DELAY)
+            dataBack = spiDevice.read(1)
+            result = int.from_bytes(dataBack, byteorder='big')
+            message = 'Pass!' if result == 50 else 'Invalid!' if result == 200 else 'Fail!'
+            if message == 'Fail!': print(f'Averages: {message}') 
 
-    def Change_PRF(spiDevice, PRF, adcFreq):
-        PRFCount = int((1/PRF)/(1/adcFreq))
-        bitPRFVals = np.binary_repr(PRFCount, width=32)
-        numPRFByte1 = int(bitPRFVals[-8:],2)
-        numPRFByte2 = int(bitPRFVals[-16:-8],2)
-        numPRFByte3 = int(bitPRFVals[-24:-16],2)
-        numPRFByte4 = int(bitPRFVals[-32:-24],2)
+    def Change_PRF(spiDevice, PRF):
+        if PRF > 5000:
+            print('Maximum PRF exceeded!')
+        elif PRF < 1:
+            print('PRF too low!')   
+        else:
+            PRFCount = int((1/PRF)/(1/ADC_FREQ))
+            bitPRFVals = np.binary_repr(PRFCount, width=32)
+            numPRFByte1 = int(bitPRFVals[-8:],2)
+            numPRFByte2 = int(bitPRFVals[-16:-8],2)
+            numPRFByte3 = int(bitPRFVals[-24:-16],2)
+            numPRFByte4 = int(bitPRFVals[-32:-24],2)
 
-        pulse = ['4']
-        pulseStr = f'{ord(pulse[0]):02x}{numPRFByte1:02x}{numPRFByte2:02x}{numPRFByte3:02x}{numPRFByte4:02x}'
-        pulseByt = bytes.fromhex(pulseStr)
+            pulse = ['4']
+            pulseStr = f'{ord(pulse[0]):02x}{numPRFByte1:02x}{numPRFByte2:02x}{numPRFByte3:02x}{numPRFByte4:02x}'
+            pulseByt = bytes.fromhex(pulseStr)
 
-        spiDevice.write(pulseByt)
-        time.sleep(readDelay)
-        dataBack = spiDevice.read(1)
-        result = int.from_bytes(dataBack, byteorder='big')
-        message = 'Pass!' if result == 50 else 'Invalid!' if result == 200 else 'Fail!'
-        if message == 'Fail!': print(f'PRF: {message}')
+            spiDevice.write(pulseByt)
+            time.sleep(READ_DELAY)
+            dataBack = spiDevice.read(1)
+            result = int.from_bytes(dataBack, byteorder='big')
+            message = 'Pass!' if result == 50 else 'Invalid!' if result == 200 else 'Fail!'
+            if message == 'Fail!': print(f'PRF: {message}')
 
-    def ADC_Threshold(spiDevice, threshold_level, trigger):
-        bitADCVals = np.binary_repr(threshold_level, width=8)
+    def ADC_Threshold(spiDevice, THRESHOLD_LEVEL, TRIGGER):
+        bitADCVals = np.binary_repr(THRESHOLD_LEVEL, width=8)
         numADCByte = int(bitADCVals[-8:],2)
 
-        ADC = ['5',str(trigger),'a','a']
+        ADC = ['5',str(TRIGGER),'a','a']
         ADCStr = f'{ord(ADC[0]):02x}{ord(ADC[1]):02x}{numADCByte:02x}{ord(ADC[2]):02x}{ord(ADC[3]):02x}'
         ADCByt = bytes.fromhex(ADCStr)
 
         spiDevice.write(ADCByt)
-        time.sleep(readDelay)
+        time.sleep(READ_DELAY)
         dataBack = spiDevice.read(1)
         result = int.from_bytes(dataBack, byteorder='big')
         message = 'Pass!' if result == 50 else 'Invalid!' if result == 200 else 'Fail!'
         if message == 'Fail!': print(f'ADC: {message}')
 
-    def Change_Record_Length(spiDevice, recordLength, adcFreq):
-        recordPoints = int(recordLength * adcFreq)
+    def Change_Record_Length(spiDevice, recordLength):
+        recordPoints = int(recordLength * ADC_FREQ)
         bitRecVals = np.binary_repr(int(recordPoints), width=16)
         numRecByte1 = int(bitRecVals[-8:],2)
         numRecByte2 = int(bitRecVals[-16:-8],2)
@@ -122,7 +136,7 @@ class Vitesse:
         recordByt = bytes.fromhex(recordStr)
 
         spiDevice.write(recordByt)
-        time.sleep(readDelay)
+        time.sleep(READ_DELAY)
         dataBack = spiDevice.read(1)
         result = int.from_bytes(dataBack, byteorder='big')
         message = 'Pass!' if result == 50 else 'Invalid!' if result == 200 else 'Fail!'
@@ -130,17 +144,17 @@ class Vitesse:
 
         return recordPoints
 
-    def Trigger_Phasing(spiDevice, phaseArrayMicro, adcFreq):
-        phaseArray = np.ceil(np.array(phaseArrayMicro[::-1]) * adcFreq / 1_000_000)
+    def Trigger_Phasing(spiDevice, phaseArrayMicro):
+        phaseArray = np.ceil(np.array(phaseArrayMicro[::-1]) * ADC_FREQ / 1_000_000)
         phasingActive = any(phaseArray > 0)
         if phasingActive == False:
             phaseByt = b'7Naaa'
             spiDevice.write(phaseByt)
-            time.sleep(readDelay)
+            time.sleep(READ_DELAY)
             dataBack = spiDevice.read(1)
             result = int.from_bytes(dataBack, byteorder='big')
             message = 'Pass!' if result == 50 else 'Invalid!' if result == 200 else 'Fail!'
-            if message == 'Fail!': print(f'No Trigger Phasing: {message}') 
+            if message == 'Fail!': print(f'No TRIGGER Phasing: {message}') 
         else:
             phase_indices = [index for index, value in enumerate(phaseArray) if value != 0]
             for i in phase_indices:
@@ -155,19 +169,19 @@ class Vitesse:
                 phaseByt = bytes.fromhex(phaseStr)
 
                 spiDevice.write(phaseByt)
-                time.sleep(readDelay)
+                time.sleep(READ_DELAY)
                 dataBack = spiDevice.read(1)
                 result = int.from_bytes(dataBack, byteorder='big')
                 message = 'Pass!' if result == 50 else 'Invalid!' if result == 200 else 'Fail!'
-                if message == 'Fail!': print(f'Trigger Phase (CH{8-i}): {message}')
+                if message == 'Fail!': print(f'TRIGGER Phase (CH{8-i}): {message}')
 
-    def Record_Delay(spiDevice, delayArrayMicro, adcFreq):
-        delayArray = np.ceil(np.array(delayArrayMicro[::-1]) * adcFreq / 1_000_000)
+    def Record_Delay(spiDevice, delayArrayMicro):
+        delayArray = np.ceil(np.array(delayArrayMicro[::-1]) * ADC_FREQ / 1_000_000)
         delayActive = any(delayArray > 0)
         if delayActive == False:
             delayByt = b'8Naaa'
             spiDevice.write(delayByt)
-            time.sleep(readDelay)
+            time.sleep(READ_DELAY)
             dataBack = spiDevice.read(1)
             result = int.from_bytes(dataBack, byteorder='big')
             message = 'Pass!' if result == 50 else 'Invalid!' if result == 200 else 'Fail!'
@@ -186,7 +200,7 @@ class Vitesse:
                 delayByt = bytes.fromhex(delayStr)
 
                 spiDevice.write(delayByt)
-                time.sleep(readDelay)
+                time.sleep(READ_DELAY)
                 dataBack = spiDevice.read(1)
                 result = int.from_bytes(dataBack, byteorder='big')
                 message = 'Pass!' if result == 50 else 'Invalid!' if result == 200 else 'Fail!'
@@ -200,14 +214,14 @@ class Vitesse:
 
         while ByteBack != 100:
             Byte = spiDevice.read(1)
-            time.sleep(readDelay)
+            time.sleep(READ_DELAY)
             ByteBack = np.frombuffer(Byte, dtype = np.uint8)
             
-        if int(recordPoints*msgBytes*numChannelsOn+2*numChannelsOn-1) < 64000:
-            bytesBack = spiDevice.read(int(recordPoints*msgBytes*numChannelsOn+2*numChannelsOn-1))
+        if int(recordPoints*MSG_BYTES*numChannelsOn+2*numChannelsOn-1) < 64000:
+            bytesBack = spiDevice.read(int(recordPoints*MSG_BYTES*numChannelsOn+2*numChannelsOn-1))
         else:
-            bytesBack = spiDevice.read(int((recordPoints*msgBytes*numChannelsOn+2*numChannelsOn-1)/2))
-            bytesBack += spiDevice.read(int(recordPoints*msgBytes*numChannelsOn+2*numChannelsOn-1)-int((recordPoints*msgBytes*numChannelsOn+2*numChannelsOn-1)/2))
+            bytesBack = spiDevice.read(int((recordPoints*MSG_BYTES*numChannelsOn+2*numChannelsOn-1)/2))
+            bytesBack += spiDevice.read(int(recordPoints*MSG_BYTES*numChannelsOn+2*numChannelsOn-1)-int((recordPoints*MSG_BYTES*numChannelsOn+2*numChannelsOn-1)/2))
 
         array = np.frombuffer(bytesBack, dtype = np.uint8)
         array = np.insert(array, 0, 100)
@@ -216,7 +230,7 @@ class Vitesse:
         channel = np.split(array, numChannelsOn)
         channel = [channel[1:-1] for channel in channel]
         
-        bytearray = np.empty((numChannelsOn, recordPoints * msgBytes // 3, 3), dtype=float)
+        bytearray = np.empty((numChannelsOn, recordPoints * MSG_BYTES // 3, 3), dtype=float)
         reshapearray = np.empty((numChannelsOn, recordPoints), dtype=float)
         normarray = np.empty((numChannelsOn, recordPoints), dtype=float)
         echosig = np.empty((numChannelsOn, recordPoints), dtype=float)

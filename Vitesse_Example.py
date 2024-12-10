@@ -1,6 +1,6 @@
 from Vitesse_API_S import Vitesse
 
-serial_number = 'AB'
+serial_number = 'B'
 
 spiDevice = Vitesse.Initialise(serial_number)
 
@@ -9,20 +9,20 @@ spiDevice = Vitesse.Initialise(serial_number)
 num_averages = 100
 num_chips = 7
 num_cycles = 2
-adcFreq = 50e6
 recordLength = 25e-6
 PRF = 5000
-channelsOnArray = [0, 0, 0, 0, 0, 0, 0, 0] # channels on
+
+channelsOnArray = [1, 0, 0, 0, 0, 0, 0, 0] # channels on
 phaseArrayMicro = [0, 0, 0, 0, 0, 0, 0, 0] # phasing in microseconds
 delayArrayMicro = [0, 0, 0, 0, 0, 0, 0, 0] # delay in microseconds
 
 Vitesse.Change_Symbol(spiDevice, num_chips, num_cycles)
 numChannelsOn, numChannelsOnArray = Vitesse.Channel_Enable(spiDevice, channelsOnArray)
 Vitesse.Change_Averages(spiDevice, num_averages)
-Vitesse.Change_PRF(spiDevice, PRF, adcFreq)
-recordPoints = Vitesse.Change_Record_Length(spiDevice, recordLength, adcFreq)
-Vitesse.Trigger_Phasing(spiDevice, phaseArrayMicro, adcFreq)
-Vitesse.Record_Delay(spiDevice, delayArrayMicro, adcFreq)
+Vitesse.Change_PRF(spiDevice, PRF)
+recordPoints = Vitesse.Change_Record_Length(spiDevice, recordLength)
+Vitesse.Trigger_Phasing(spiDevice, phaseArrayMicro)
+Vitesse.Record_Delay(spiDevice, delayArrayMicro)
 
 print('')
 print('Initialised Vitesse!')
