@@ -13,7 +13,6 @@ The SONUS Vitesse Python API is a high-performance interface designed to integra
    - [Channel_Enable](#channel_enable)
    - [Change_Averages](#change_averages)
    - [Change_PRF](#change_prf)
-   - [ADC_Threshold](#adc_threshold)
    - [Change_Record_Length](#change_record_length)
    - [Trigger_Phasing](#trigger_phasing)
    - [Record_Delay](#record_delay)
@@ -117,21 +116,6 @@ Vitesse.Change_PRF(spiDevice, 1000, 30e6)
 
 ---
 
-### ADC_Threshold
-Sets the ADC threshold and trigger mode.
-
-**Parameters**:
-- `spiDevice`: Device object returned by `Initialise`.
-- `threshold_level`: Integer representing the threshold level (0 or 1).
-- `trigger`: Trigger mode (e.g., 0 for off, 1 for on).
-
-**Example:**
-```python
-Vitesse.ADC_Threshold(spiDevice, 0, 0)
-```
-
----
-
 ### Change_Record_Length
 Configures the length of the data recording.
 
@@ -230,8 +214,6 @@ num_cycles = 2
 adcFreq = 50e6
 recordLength = 25e-6
 PRF = 5000
-threshold_level = 0
-trigger = 0
 channelsOnArray = [0, 0, 0, 0, 0, 0, 0, 1] # channels on
 phaseArrayMicro = [0, 0, 0, 0, 0, 0, 0, 0] # phasing in microseconds
 delayArrayMicro = [0, 0, 0, 0, 0, 0, 0, 0] # delay in microseconds
@@ -240,7 +222,6 @@ Vitesse.Change_Symbol(spiDevice, num_chips, num_cycles)
 numChannelsOn, numChannelsOnArray = Vitesse.Channel_Enable(spiDevice, channelsOnArray)
 Vitesse.Change_Averages(spiDevice, num_averages)
 Vitesse.Change_PRF(spiDevice, PRF, adcFreq)
-Vitesse.ADC_Threshold(spiDevice, threshold_level, trigger)
 recordPoints = Vitesse.Change_Record_Length(spiDevice, recordLength, adcFreq)
 Vitesse.Trigger_Phasing(spiDevice, phaseArrayMicro, adcFreq)
 Vitesse.Record_Delay(spiDevice, delayArrayMicro, adcFreq)
