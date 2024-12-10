@@ -214,7 +214,7 @@ num_cycles = 2
 adcFreq = 50e6
 recordLength = 25e-6
 PRF = 5000
-channelsOnArray = [0, 0, 0, 0, 0, 0, 0, 1] # channels on
+channelsOnArray = [1, 0, 0, 0, 0, 0, 0, 0] # channels on
 phaseArrayMicro = [0, 0, 0, 0, 0, 0, 0, 0] # phasing in microseconds
 delayArrayMicro = [0, 0, 0, 0, 0, 0, 0, 0] # delay in microseconds
 
