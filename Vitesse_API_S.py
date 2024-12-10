@@ -42,11 +42,11 @@ class Vitesse:
         if message == 'Fail!': print(f'Symbol Change: {message}')
 
     def Channel_Enable(spiDevice, channelsOnArray):
-        channelsOn = ''.join(map(str, channelsOnArray))
+        reversedChannelsOnArray = channelsOnArray[::-1]
+        channelsOn = ''.join(map(str, reversedChannelsOnArray))
         channelByte = int(channelsOn[-8:],2)
-        numChannelsOn = np.count_nonzero(channelsOnArray)
-
-        numChannelsOnArray = [index for index, value in enumerate(channelsOnArray) if value == 1]
+        numChannelsOn = np.count_nonzero(reversedChannelsOnArray)
+        numChannelsOnArray = [index for index, value in enumerate(reversedChannelsOnArray) if value == 1]
 
         channel = ['2', 'a', 'a', 'a']
         channelStr = f'{ord(channel[0]):02x}{channelByte:02x}{ord(channel[1]):02x}{ord(channel[2]):02x}{ord(channel[3]):02x}'
@@ -131,7 +131,7 @@ class Vitesse:
         return recordPoints
 
     def Trigger_Phasing(spiDevice, phaseArrayMicro, adcFreq):
-        phaseArray = np.ceil(np.array(phaseArrayMicro) * adcFreq / 1_000_000)
+        phaseArray = np.ceil(np.array(phaseArrayMicro[::-1]) * adcFreq / 1_000_000)
         phasingActive = any(phaseArray > 0)
         if phasingActive == False:
             phaseByt = b'7Naaa'
@@ -162,7 +162,7 @@ class Vitesse:
                 if message == 'Fail!': print(f'Trigger Phase (CH{8-i}): {message}')
 
     def Record_Delay(spiDevice, delayArrayMicro, adcFreq):
-        delayArray = np.ceil(np.array(delayArrayMicro) * adcFreq / 1_000_000)
+        delayArray = np.ceil(np.array(delayArrayMicro[::-1]) * adcFreq / 1_000_000)
         delayActive = any(delayArray > 0)
         if delayActive == False:
             delayByt = b'8Naaa'
