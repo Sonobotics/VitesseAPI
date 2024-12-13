@@ -26,21 +26,38 @@ class Vitesse:
         Vitesse.ADC_Threshold(spiDevice, THRESHOLD_LEVEL, TRIGGER)
 
         return spiDevice
+    
+    def Check_Validity(phaseArrayMicro, delayArrayMicro, recordLength, PRF):
+        if PRF == 0:
+            print('PRF too low!')
+            sys.exit(0)
+        if (np.max(phaseArrayMicro) + np.max(delayArrayMicro)) / 1000000 + recordLength >= 1/PRF:
+            print('Provided signal is invalid!')
+            sys.exit(0)
+        else:
+            print('Signal is valid!')
 
     def Change_Symbol(spiDevice, num_chips, num_cycles):
-        symbolByte1 = int(num_chips)
-        symbolByte2 = int(num_cycles)
+        if num_chips > 13 or num_chips < 5:
+            print('Number of chips out of range!')
+            sys.exit(0)
+        elif num_cycles > 3 or num_cycles < 1:
+            print('Number of cycles out of range!')
+            sys.exit(0)
+        else:
+            symbolByte1 = int(num_chips)
+            symbolByte2 = int(num_cycles)
 
-        symbol = ['1', 'p', 'a']
-        symbolStr = f'{ord(symbol[0]):02x}{symbolByte1:02x}{symbolByte2:02x}{ord(symbol[1]):02x}{ord(symbol[2]):02x}'
-        symbolByt = bytes.fromhex(symbolStr)
+            symbol = ['1', 'p', 'a']
+            symbolStr = f'{ord(symbol[0]):02x}{symbolByte1:02x}{symbolByte2:02x}{ord(symbol[1]):02x}{ord(symbol[2]):02x}'
+            symbolByt = bytes.fromhex(symbolStr)
 
-        spiDevice.write(symbolByt)
-        time.sleep(READ_DELAY)
-        dataBack = spiDevice.read(1)
-        result = int.from_bytes(dataBack, byteorder='big')
-        message = 'Pass!' if result == 50 else 'Invalid!' if result == 200 else 'Fail!'
-        if message == 'Fail!': print(f'Symbol Change: {message}')
+            spiDevice.write(symbolByt)
+            time.sleep(READ_DELAY)
+            dataBack = spiDevice.read(1)
+            result = int.from_bytes(dataBack, byteorder='big')
+            message = 'Pass!' if result == 50 else 'Invalid!' if result == 200 else 'Fail!'
+            if message == 'Fail!': print(f'Symbol Change: {message}')
 
     def Channel_Enable(spiDevice, channelsOnArray):
         reversedChannelsOnArray = channelsOnArray[::-1]
@@ -51,6 +68,7 @@ class Vitesse:
 
         if numChannelsOn > 8:
             print('Maximum number of channels exceeded!')
+            sys.exit(0)
         else:
             channel = ['2', 'a', 'a', 'a']
             channelStr = f'{ord(channel[0]):02x}{channelByte:02x}{ord(channel[1]):02x}{ord(channel[2]):02x}{ord(channel[3]):02x}'
@@ -68,8 +86,10 @@ class Vitesse:
     def Change_Averages(spiDevice, num_averages):
         if num_averages > 1000:
             print('Maximum number of averages exceeded!')
+            sys.exit(0)
         elif num_averages < 1:
             print('Number of averages too low!')
+            sys.exit(0)
         else:
             bitAveVals = np.binary_repr(num_averages, width=16)
             numAveByte1 = int(bitAveVals[-8:],2)
@@ -89,8 +109,10 @@ class Vitesse:
     def Change_PRF(spiDevice, PRF):
         if PRF > 5000:
             print('Maximum PRF exceeded!')
+            sys.exit(0)
         elif PRF < 1:
-            print('PRF too low!')   
+            print('PRF too low!')
+            sys.exit(0)
         else:
             PRFCount = int((1/PRF)/(1/ADC_FREQ))
             bitPRFVals = np.binary_repr(PRFCount, width=32)
@@ -154,7 +176,7 @@ class Vitesse:
             dataBack = spiDevice.read(1)
             result = int.from_bytes(dataBack, byteorder='big')
             message = 'Pass!' if result == 50 else 'Invalid!' if result == 200 else 'Fail!'
-            if message == 'Fail!': print(f'No TRIGGER Phasing: {message}') 
+            if message == 'Fail!': print(f'No Trigger Phasing: {message}') 
         else:
             phase_indices = [index for index, value in enumerate(phaseArray) if value != 0]
             for i in phase_indices:
@@ -247,5 +269,8 @@ class Vitesse:
         return echosig
 
     def Close_Device(spiDevice):
-        spiDevice.read(100000)
+        finalarray = [0,1,0]
+        while finalarray[-1] != finalarray[-2] or finalarray[-2] != finalarray[-3]:
+            finalarray = np.frombuffer(spiDevice.read(10), dtype = np.uint8)
+        Vitesse.Channel_Enable(spiDevice, [0,0,0,0,0,0,0,0])
         spiDevice.close()

@@ -4,19 +4,19 @@ import math
 import ctypes
 import os
 import sys
+import platform
 
 # =========================== importing ftd2xx drivers ===========================
 
 if sys.platform.startswith("win"):
-	dll_path = os.path.abspath("ftdiHandler.dll")
+	dll_path = os.getcwd()+"/Libraries/ftdiHandler.dll"
 	lib = ctypes.CDLL(dll_path)
-elif sys.platform.startswith("darwin") == False:
-	try: 
-		lib = ctypes.CDLL("./Sonobotics-FTDI/ftdiHandler.so") # when running from master python project.
-	except: 
-		lib = ctypes.CDLL("./ftdiHandler.so") # when running library alone
+elif platform.machine() == 'AMD64':
+	lib = ctypes.CDLL("./Libraries/ftdiHandler64.so")
+elif platform.machine() == 'aarch64':
+	lib = ctypes.CDLL("./Libraries/ftdiHandler.so")
 else:
-	print('Incompatible With iOS!')
+	print('Incompatible with iOS!')
 	sys.exit(0)
 	
 # =========================== c++ function setup ===========================

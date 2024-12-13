@@ -7,6 +7,10 @@ The SONUS Vitesse Python API is a high-performance interface designed to integra
 ## Table of Contents
 1. [Introduction](#introduction)
 2. [Setup and Initialisation](#setup-and-initialisation)
+   - [Python and Git Installation](#python-and-git-installation)
+   - [Windows Driver Installation](#windows_driver_installation)
+   - [Linux x86_64 Driver Installation](#linux-x86_64-driver-installation)
+   - [Linux ARM Driver Installation](#linux-ARM-driver-installation)
 3. [Function Descriptions](#function-descriptions)
    - [Initialise](#initialise)
    - [Change_Symbol](#change_symbol)
@@ -29,10 +33,37 @@ The SONUS Vitesse Python API allows users to directly interact with the SONUS Vi
 
 ## Setup and Initialisation
 
-To use this API, ensure the following:
-1. Python is installed on your system.
-2. The `sonoboticsFTDI` library is installed and accessible.
-3. The SONUS Vitesse device is connected and its serial number is known.
+### Python and Git Installation
+
+To install the API on your system, firstly download Python from https://www.python.org/downloads/ and Git from https://git-scm.com/downloads. Then, once these steps are complete, clone the VitesseAPI github onto your system using the below steps:
+
+```bash
+git clone https://github.com/SONOBOTICS-paddy/VitesseAPI.git
+cd VitesseAPI
+pip install -r requirements.txt
+```
+
+### Windows Driver Installation
+
+To install the drivers for Windows, navigate to the 'Drivers' folder, open the 'windows_FTDI' folder and run the executable within it.
+
+### Linux x86_64 Driver Installation
+
+To install the drivers for an x86_64 Linux computer, navigate to the 'VitesseAPI' folder and run the following commands:
+
+```bash
+cd Drivers
+sudo bash x86_64_install.sh
+```
+
+### Linux ARM Driver Installation
+
+To install the drivers for an ARM Linux computer, navigate to the 'VitesseAPI' folder and run the following commands:
+
+```bash
+cd Drivers
+sudo bash arm_install.sh
+```
 
 ---
 
@@ -49,18 +80,41 @@ Initialises the SONUS Vitesse device using its serial number. If the system is n
 
 **Example:**
 ```python
-spiDevice = Vitesse.Initialise('serial_number')
+spiDevice = Vitesse.Initialise(serial_number)
+```
+
+---
+
+### Check_Validity
+Checks the validity of the input signal to the Vitesse, ensuring that the system does not lose synchronisation.
+
+**Parameters**:
+- `phaseArrayMicro`: List of phase values in microseconds for each channel.
+- `delayArrayMicro`: List of delay values in microseconds for each channel.
+- `recordLength`: Length of recording in seconds.
+- `PRF`: Desired PRF in Hz.
+
+**Returns**:
+- `spiDevice` object.
+
+**Example:**
+```python
+Vitesse.Check_Validity(phaseArrayMicro, delayArrayMicro, recordLength, PRF)
 ```
 
 ---
 
 ### Change_Symbol
-Configures the device symbol parameters.
+Configures the device excitation symbol parameters.
 
 **Parameters**:
 - `spiDevice`: Device object returned by `Initialise`.
 - `num_chips`: Number of chips to be set.
 - `num_cycles`: Number of cycles for the symbol.
+
+**Range:**
+- `num_chips`: 5 to 13.
+- `num_cycles`: 1 to 3.
 
 **Example:**
 ```python
@@ -206,53 +260,69 @@ Vitesse.Close_Device(spiDevice)
 
 ## Example Usage
 ```python
-from Vitesse_API_S import Vitesse
+from Vitesse_API import Vitesse
+import signal
+
+## Device Initialisation
 
 serial_number = 'B'
 
 spiDevice = Vitesse.Initialise(serial_number)
 
-# signal parameters
+## Signal Parameters
 
-num_averages = 100
-num_chips = 7
-num_cycles = 2
-recordLength = 25e-6
-PRF = 5000
+numAverages = 100      ## Averages Range: 1 to 1000
 
-channelsOnArray = [1, 0, 0, 0, 0, 0, 0, 0] # channels on
-phaseArrayMicro = [0, 0, 0, 0, 0, 0, 0, 0] # phasing in microseconds
-delayArrayMicro = [0, 0, 0, 0, 0, 0, 0, 0] # delay in microseconds
+numChips = 7           ## Chips Range = 5 to 13 (5 chips = 5 MHz, 6 chips = 4.17 MHz, 7 chips = 3.57 MHz, 8 chips = 3.13 MHz, 
+                       ## 9 chips = 2.78 MHz, 10 chips = 2.5 MHz, 11 chips = 2.27 MHz, 12 chips = 2.08 MHz, 13 chips = 1.92 MHz)
+                       ## (Excitation Frequency = 1 / numChips * 2 * 20e-9)
 
-Vitesse.Change_Symbol(spiDevice, num_chips, num_cycles)
+numCycles = 2          ## Cycles Range: 1 to 3
+
+recordLength = 25e-6   ## Record Length Range: 0 to 100 us (8 CH), 0 to 200 us (4 CH), 0 to 800 us (8 CH)
+
+PRF = 2000             ## PRF Range: 1 to 5000 Hz
+
+channelsOnArray = [1, 1, 1, 1, 1, 1, 1, 1] ## Channels on e.g. [Channel 1 (on/off), Channel 2(on/off), etc.]
+phaseArrayMicro = [0, 0, 0, 0, 0, 0, 0, 0] ## Phasing in microseconds for each channel e.g. [Channel 1 Phase (us), Channel 2 Phase (us), etc.]
+delayArrayMicro = [0, 0, 0, 0, 0, 0, 0, 0] ## Delay in microseconds for each channel e.g. [Channel 1 Delay (us), Channel 2 Delay (us), etc.]
+
+## Checking Validity of Signal Settings
+
+Vitesse.Check_Validity(phaseArrayMicro, delayArrayMicro, recordLength, PRF)
+
+## Settings Initialised on Vitesse
+
+Vitesse.Change_Symbol(spiDevice, numChips, numCycles)
 numChannelsOn, numChannelsOnArray = Vitesse.Channel_Enable(spiDevice, channelsOnArray)
-Vitesse.Change_Averages(spiDevice, num_averages)
+Vitesse.Change_Averages(spiDevice, numAverages)
 Vitesse.Change_PRF(spiDevice, PRF)
 recordPoints = Vitesse.Change_Record_Length(spiDevice, recordLength)
 Vitesse.Trigger_Phasing(spiDevice, phaseArrayMicro)
 Vitesse.Record_Delay(spiDevice, delayArrayMicro)
-print('')
+print('Initialised Vitesse!')
 
-# acquisition loop
+## Code to Check Get_Array is Complete Before Closing Device
+
+loop_complete = False
+def handle_keyboard_interrupt(signum, frame):
+    global loop_complete
+    loop_complete = True
+signal.signal(signal.SIGINT, handle_keyboard_interrupt)
+
+## Acquisition Loop
 
 count = 0
 
 try:
-    while True:
+    while not loop_complete:
         count += 1
-        array = Vitesse.Get_Array(spiDevice, num_averages, numChannelsOn, numChannelsOnArray, recordPoints, PRF)
+        array = Vitesse.Get_Array(spiDevice, numAverages, numChannelsOn, numChannelsOnArray, recordPoints, PRF)
         array = array.flatten()
-        print('Signal (',count,'): ', array)
-
-except KeyboardInterrupt:
-    print('')
-    print('Ctrl + C pressed!')
-    print('')
+        print('Signal (', count, '): ', array)
 
 finally:
-    Vitesse.Channel_Enable(spiDevice, [0,0,0,0,0,0,0,0])
     Vitesse.Close_Device(spiDevice)
-    print('')
     print('Device Closed!')
 ```
 
