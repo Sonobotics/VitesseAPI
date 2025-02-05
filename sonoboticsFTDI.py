@@ -11,12 +11,12 @@ import platform
 if sys.platform.startswith("win"):
 	dll_path = os.getcwd()+"/Libraries/ftdiHandler.dll"
 	lib = ctypes.CDLL(dll_path)
-elif platform.machine() == 'AMD64':
+elif platform.machine() == 'x86_64':
 	lib = ctypes.CDLL("./Libraries/ftdiHandler64.so")
 elif platform.machine() == 'aarch64':
 	lib = ctypes.CDLL("./Libraries/ftdiHandler.so")
 else:
-	print('Incompatible with iOS!')
+	print('Incompatible with this operating system!')
 	sys.exit(0)
 	
 # =========================== c++ function setup ===========================
