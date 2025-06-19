@@ -57,28 +57,20 @@ def getNumDevices():
 		return num
 
 class ftdiChannel:
-	# constructor
-	# PROTOCOL: SPI/UART
-	# CONNMODE: "serialNum"/"deviceNum"
-	# CONNID: the device's serial number or device number
 	def __init__(self, protocol, connMode, connID):	
 		self.protocol = protocol
 		self.connID = connID
-
-		if sys.platform.startswith("linux"):
-			os.system('sudo rmmod ftdi_sio 2>/dev/null')
 		
 		if connMode == "serialNum":
 			ftHandle = ctypes.c_void_p()
 			return_code = lib.connect_device(ctypes.c_char_p(connID), ctypes.byref(ftHandle))
-
+			
 			if return_code == 1:
 				raise Exception("Can't Connect to Device!")
 			self.ftHandle = ftHandle.value
 
 		elif connMode == "deviceNum":
 			ftHandle = ctypes.c_void_p()
-			
 			return_code = lib.connect_device_num(connID, ctypes.byref(ftHandle))
 
 			if return_code == 1:
@@ -87,7 +79,7 @@ class ftdiChannel:
 
 		else:
 			raise Exception("Invalid Connection Mode!")
-
+		
 		if protocol == "SPI":
 			return_code = lib.configureSPI(ctypes.c_void_p(self.ftHandle))
 			if return_code == 1:
@@ -95,7 +87,7 @@ class ftdiChannel:
 
 		elif protocol != "UART":
 			raise Exception("Invalid FTDI Protocol!")
-
+		
 	def write(self, data):
 		if self.protocol == "UART":
 			if isinstance(data, (bytes, bytearray)):	
@@ -120,13 +112,11 @@ class ftdiChannel:
 
 			if return_code == 1:
 				raise Exception("SPI Write Error!")
-	
+			
 	def read(self, numBytes):
 		if self.protocol == "UART":
 			data = (ctypes.c_char * numBytes)()
-
 			data_ptr = ctypes.cast(data, ctypes.POINTER(ctypes.c_char))
-
 			return_code = lib.uartRead(ctypes.c_void_p(self.ftHandle), wintypes.DWORD(numBytes), data_ptr)
 
 			if return_code == 1:
@@ -189,7 +179,6 @@ class ftdiChannel:
 
 		if result != 0:
 			raise Exception("EEPROM write failed.")
-		
 		print("EEPROM write successful.")
 
 	def dumpEEPROM(self):

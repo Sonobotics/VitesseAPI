@@ -13,11 +13,11 @@ TRIGGER = 0
 ADC_FREQ = 50e6
 
 class Vitesse:
+    if sys.platform.startswith("win") == False:
+            os.system('sudo rmmod ftdi_sio 2>/dev/null')
+
     def Initialise():
         global maxChannels
-
-        if sys.platform.startswith("win") == False:
-            os.system('sudo rmmod ftdi_sio 2>/dev/null')
 
         numDevices = sbftdi.getNumDevices()
         serialNumList = []
@@ -62,9 +62,6 @@ class Vitesse:
 
     def Initialise_Ser_No(serial_number):
         global maxChannels
-
-        if sys.platform.startswith("win") == False:
-            os.system('sudo rmmod ftdi_sio 2>/dev/null')
 
         serial_number = serial_number + 'B'
             
