@@ -13,19 +13,109 @@ TRIGGER = 0
 ADC_FREQ = 50e6
 
 class Vitesse:
-    def Initialise(serial_number):
+    def Initialise():
+        global maxChannels
+
         if sys.platform.startswith("win") == False:
             os.system('sudo rmmod ftdi_sio 2>/dev/null')
 
-        if serial_number[-1] != 'B':
-            print('Serial number ends in wrong character!')
+        numDevices = sbftdi.getNumDevices()
+        serialNumList = []
+        serial_number = '0'
+
+        for i in range(0, numDevices):
+            spiDevice = sbftdi.ftdiChannel("SPI", "deviceNum", i)
+            eepromData = spiDevice.readEEPROM()
+
+            manufacturer = eepromData.get('Manufacturer')
+            serial_number = eepromData.get('Serial Number')
+
+            if manufacturer == 'Sonobotics' and serial_number not in serialNumList:
+                spiDevice.close()
+                break
+
+            spiDevice.close()
+
+        if serial_number == '0' or manufacturer != 'Sonobotics':
+            print('No Sonobotics devices connected!')
             sys.exit(0)
-            
+
+        serial_number = serial_number + 'B'
+
         spiDevice = sbftdi.ftdiChannel("SPI", "serialNum", serial_number.encode())
+
+        eepromData = spiDevice.readEEPROM()
+
+        print('\n-----------Selected Device:-----------')
+
+        for key in ['Device','Serial Number']:
+            if key in eepromData:
+                if key == 'Serial Number':
+                    print(f"{key:<14}: {eepromData[key]}\n")
+                if key == 'Device':
+                    print(f"{key:<14}: {eepromData[key]}")
+                    maxChannels = int(eepromData[key][0])
 
         Vitesse.ADC_Threshold(spiDevice, THRESHOLD_LEVEL, TRIGGER)
 
         return spiDevice
+
+    def Initialise_Ser_No(serial_number):
+        global maxChannels
+
+        if sys.platform.startswith("win") == False:
+            os.system('sudo rmmod ftdi_sio 2>/dev/null')
+
+        serial_number = serial_number + 'B'
+            
+        spiDevice = sbftdi.ftdiChannel("SPI", "serialNum", serial_number.encode())
+
+        eepromData = spiDevice.readEEPROM()
+
+        print('\n-----------Selected Device:-----------')
+
+        for key in ['Device','Serial Number']:
+            if key in eepromData:
+                if key == 'Serial Number':
+                    print(f"{key:<14}: {eepromData[key]}\n")
+                if key == 'Device':
+                    print(f"{key:<14}: {eepromData[key]}")
+                    maxChannels = int(eepromData[key][0])
+
+        Vitesse.ADC_Threshold(spiDevice, THRESHOLD_LEVEL, TRIGGER)
+
+        return spiDevice
+    
+    def List_Devices():
+        numDevices = sbftdi.getNumDevices()
+        serialNumList = []
+        devCount = 0
+
+        for i in range(0, numDevices):
+            spiDevice = sbftdi.ftdiChannel("SPI", "deviceNum", i)
+            eepromData = spiDevice.readEEPROM()
+
+            manufacturer = eepromData.get('Manufacturer')
+            serial_number = eepromData.get('Serial Number')
+
+            if manufacturer != 'Sonobotics' or serial_number in serialNumList:
+                spiDevice.close()
+            else:
+                devCount += 1
+
+                print(f'\n---------------Device {devCount}---------------')
+
+                for key in ['Device', 'Serial Number']:
+                    if key in eepromData:
+                        print(f"{key:<14}: {eepromData[key]}")
+
+                serialNumList.append(serial_number)
+
+                spiDevice.close()
+
+        if devCount == 0:
+            print('No Sonobotics devices connected!')
+            sys.exit(0)
     
     def Check_Validity(phaseArrayMicro, delayArrayMicro, recordLength, PRF):
         if PRF == 0:
@@ -35,7 +125,7 @@ class Vitesse:
             print('Provided signal is invalid!')
             sys.exit(0)
         else:
-            print('Signal is valid!')
+            print('Signal is valid!\n')
 
     def Change_Symbol(spiDevice, num_chips, num_cycles):
         if num_chips > 13 or num_chips < 5:
@@ -57,7 +147,7 @@ class Vitesse:
             dataBack = spiDevice.read(1)
             result = int.from_bytes(dataBack, byteorder='big')
             message = 'Pass!' if result == 50 else 'Invalid!' if result == 200 else 'Fail!'
-            if message == 'Fail!': print(f'Symbol Change: {message}')
+            if message == 'Fail!': print(f'Symbol Change: {message}\n')
 
     def Channel_Enable(spiDevice, channelsOnArray):
         reversedChannelsOnArray = channelsOnArray[::-1]
@@ -66,7 +156,7 @@ class Vitesse:
         numChannelsOn = np.count_nonzero(reversedChannelsOnArray)
         numChannelsOnArray = [index for index, value in enumerate(reversedChannelsOnArray) if value == 1]
 
-        if numChannelsOn > 8:
+        if numChannelsOn > maxChannels:
             print('Maximum number of channels exceeded!')
             sys.exit(0)
         else:
@@ -79,7 +169,7 @@ class Vitesse:
             dataBack = spiDevice.read(1)
             result = int.from_bytes(dataBack, byteorder='big')
             message = 'Pass!' if result == 50 else 'Invalid!' if result == 200 else 'Fail!'
-            if message == 'Fail!': print(f'Channel: {message}')
+            if message == 'Fail!': print(f'Channel: {message}\n')
 
         return numChannelsOn, numChannelsOnArray
 
@@ -104,10 +194,10 @@ class Vitesse:
             dataBack = spiDevice.read(1)
             result = int.from_bytes(dataBack, byteorder='big')
             message = 'Pass!' if result == 50 else 'Invalid!' if result == 200 else 'Fail!'
-            if message == 'Fail!': print(f'Averages: {message}') 
+            if message == 'Fail!': print(f'Averages: {message}\n') 
 
     def Change_PRF(spiDevice, PRF):
-        if PRF > 5000:
+        if PRF > 20000:
             print('Maximum PRF exceeded!')
             sys.exit(0)
         elif PRF < 1:
@@ -130,7 +220,7 @@ class Vitesse:
             dataBack = spiDevice.read(1)
             result = int.from_bytes(dataBack, byteorder='big')
             message = 'Pass!' if result == 50 else 'Invalid!' if result == 200 else 'Fail!'
-            if message == 'Fail!': print(f'PRF: {message}')
+            if message == 'Fail!': print(f'PRF: {message}\n')
 
     def ADC_Threshold(spiDevice, THRESHOLD_LEVEL, TRIGGER):
         bitADCVals = np.binary_repr(THRESHOLD_LEVEL, width=8)
@@ -145,7 +235,7 @@ class Vitesse:
         dataBack = spiDevice.read(1)
         result = int.from_bytes(dataBack, byteorder='big')
         message = 'Pass!' if result == 50 else 'Invalid!' if result == 200 else 'Fail!'
-        if message == 'Fail!': print(f'ADC: {message}')
+        if message == 'Fail!': print(f'ADC: {message}\n')
 
     def Change_Record_Length(spiDevice, recordLength):
         recordPoints = int(recordLength * ADC_FREQ)
@@ -162,7 +252,7 @@ class Vitesse:
         dataBack = spiDevice.read(1)
         result = int.from_bytes(dataBack, byteorder='big')
         message = 'Pass!' if result == 50 else 'Invalid!' if result == 200 else 'Fail!'
-        if message == 'Fail!': print(f'Record Length: {message}')
+        if message == 'Fail!': print(f'Record Length: {message}\n')
 
         return recordPoints
 
@@ -176,7 +266,7 @@ class Vitesse:
             dataBack = spiDevice.read(1)
             result = int.from_bytes(dataBack, byteorder='big')
             message = 'Pass!' if result == 50 else 'Invalid!' if result == 200 else 'Fail!'
-            if message == 'Fail!': print(f'No Trigger Phasing: {message}') 
+            if message == 'Fail!': print(f'No Trigger Phasing: {message}\n') 
         else:
             phase_indices = [index for index, value in enumerate(phaseArray) if value != 0]
             for i in phase_indices:
@@ -195,7 +285,7 @@ class Vitesse:
                 dataBack = spiDevice.read(1)
                 result = int.from_bytes(dataBack, byteorder='big')
                 message = 'Pass!' if result == 50 else 'Invalid!' if result == 200 else 'Fail!'
-                if message == 'Fail!': print(f'TRIGGER Phase (CH{8-i}): {message}')
+                if message == 'Fail!': print(f'TRIGGER Phase (CH{8-i}): {message}\n')
 
     def Record_Delay(spiDevice, delayArrayMicro):
         delayArray = np.ceil(np.array(delayArrayMicro[::-1]) * ADC_FREQ / 1_000_000)
@@ -207,7 +297,7 @@ class Vitesse:
             dataBack = spiDevice.read(1)
             result = int.from_bytes(dataBack, byteorder='big')
             message = 'Pass!' if result == 50 else 'Invalid!' if result == 200 else 'Fail!'
-            if message == 'Fail!': print(f'No Record Delay: {message}') 
+            if message == 'Fail!': print(f'No Record Delay: {message}\n') 
         else:
             delay_indices = [index for index, value in enumerate(delayArray) if value != 0]
             for i in delay_indices:
@@ -226,7 +316,7 @@ class Vitesse:
                 dataBack = spiDevice.read(1)
                 result = int.from_bytes(dataBack, byteorder='big')
                 message = 'Pass!' if result == 50 else 'Invalid!' if result == 200 else 'Fail!'
-                if message == 'Fail!': print(f'Record Delay (CH{8-i}): {message}')
+                if message == 'Fail!': print(f'Record Delay (CH{8-i}): {message}\n')
 
     def Get_Array(spiDevice, num_averages, numChannelsOn, numChannelsOnArray, recordPoints, PRF):
         spiDevice.write(b'faaaa')

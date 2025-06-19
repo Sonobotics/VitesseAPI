@@ -1,5 +1,5 @@
 import ctypes
-from ctypes import wintypes
+from ctypes import wintypes, create_string_buffer
 import math
 import ctypes
 import os
@@ -21,31 +21,41 @@ else:
 	
 # =========================== c++ function setup ===========================
 
-lib.uartRead.restype = ctypes.POINTER(ctypes.c_ubyte)
-lib.uartRead.argtypes = [ctypes.c_void_p, wintypes.DWORD]
-
-lib.spiRead.restype = ctypes.POINTER(ctypes.c_ubyte)
-lib.spiRead.argtypes = [ctypes.c_void_p, ctypes.c_uint32]
-
+lib.uartRead.restype = ctypes.c_int
+lib.uartRead.argtypes = [ctypes.c_void_p, wintypes.DWORD, ctypes.POINTER(ctypes.c_char)]
+lib.spiRead.restype = ctypes.c_int
+lib.spiRead.argtypes = [ctypes.c_void_p, ctypes.c_uint32, ctypes.POINTER(ctypes.c_char)]
 lib.uartWrite.argtypes = [ctypes.c_void_p, ctypes.c_char_p, wintypes.DWORD]
+lib.uartWrite.restype = ctypes.c_int
 lib.spiWrite.argtypes = [ctypes.c_void_p, ctypes.c_char_p, ctypes.c_uint8]
-
-lib.connect_device.restype = ctypes.c_void_p
-lib.connect_device_num.restype = ctypes.c_void_p
-
+lib.spiWrite.restype = ctypes.c_int
+lib.connect_device.argtypes = [ctypes.c_char_p, ctypes.POINTER(ctypes.c_void_p)]
+lib.connect_device.restype = ctypes.c_int
+lib.connect_device_num.argtypes = [ctypes.c_int, ctypes.POINTER(ctypes.c_void_p)]
+lib.connect_device_num.restype = ctypes.c_int
 lib.set_baud_rate.argtypes = [ctypes.c_void_p, ctypes.c_int]
+lib.set_baud_rate.restype = ctypes.c_int
+lib.read_eeprom.argtypes = [ctypes.c_void_p, ctypes.POINTER(ctypes.c_char), ctypes.POINTER(ctypes.c_char), ctypes.POINTER(ctypes.c_char), ctypes.POINTER(ctypes.c_char)]
+lib.read_eeprom.restype = ctypes.c_int
+lib.dump_eeprom.argtypes = [ctypes.c_void_p]
+lib.dump_eeprom.restype = ctypes.c_int
+lib.write_eeprom.argtypes = [ctypes.c_void_p, ctypes.POINTER(ctypes.c_char), ctypes.POINTER(ctypes.c_char), ctypes.POINTER(ctypes.c_char), ctypes.POINTER(ctypes.c_char)]
+lib.write_eeprom.restype = ctypes.c_int
 lib.configureSPI.argtypes = [ctypes.c_void_p]
-
 lib.freeReadBuffer.argtypes = [ctypes.c_char_p]
-
+lib.close.restype = ctypes.c_int
+lib.setTimeouts.restype = ctypes.c_int
+lib.setUSBParameters.restype = ctypes.c_int
 
 # =========================== library classes and methods ===========================
 
-# returns number of connected FTDI devices
 def getNumDevices():
-	return lib.get_num_devices()
+	num = lib.get_num_devices()
+	if num == -1:
+		raise Exception("Error Getting Number of Devices!")
+	else:
+		return num
 
-# ftdi channel object
 class ftdiChannel:
 	# constructor
 	# PROTOCOL: SPI/UART
@@ -54,74 +64,160 @@ class ftdiChannel:
 	def __init__(self, protocol, connMode, connID):	
 		self.protocol = protocol
 		self.connID = connID
+
+		if sys.platform.startswith("linux"):
+			os.system('sudo rmmod ftdi_sio 2>/dev/null')
 		
-		# gets the devices ftHandle
 		if connMode == "serialNum":
-			self.ftHandle = lib.connect_device(ctypes.c_char_p(connID))
+			ftHandle = ctypes.c_void_p()
+			return_code = lib.connect_device(ctypes.c_char_p(connID), ctypes.byref(ftHandle))
+
+			if return_code == 1:
+				raise Exception("Can't Connect to Device!")
+			self.ftHandle = ftHandle.value
+
 		elif connMode == "deviceNum":
-			self.ftHandle = lib.connect_device_num(connID)
+			ftHandle = ctypes.c_void_p()
+			
+			return_code = lib.connect_device_num(connID, ctypes.byref(ftHandle))
+
+			if return_code == 1:
+				raise Exception("Can't Connect To Device!")
+			self.ftHandle = ftHandle.value
+
 		else:
 			raise Exception("Invalid Connection Mode!")
 
-		# configures the ftdi device to use SPI (if required)
 		if protocol == "SPI":
-			lib.configureSPI(ctypes.c_void_p(self.ftHandle))
+			return_code = lib.configureSPI(ctypes.c_void_p(self.ftHandle))
+			if return_code == 1:
+				raise Exception("Can't Configure SPI!")
+
 		elif protocol != "UART":
 			raise Exception("Invalid FTDI Protocol!")
-	
-	# writes bytes, bytearray, int or str to device
+
 	def write(self, data):
 		if self.protocol == "UART":
 			if isinstance(data, (bytes, bytearray)):	
-				lib.uartWrite(ctypes.c_void_p(self.ftHandle), ctypes.c_char_p(data), wintypes.DWORD(len(data)))
+				return_code = lib.uartWrite(ctypes.c_void_p(self.ftHandle), ctypes.c_char_p(data), wintypes.DWORD(len(data)))
 			elif isinstance(data, (int)):
 				byteLength = math.ceil(data.bit_length() / 8)
-				lib.uartWrite(ctypes.c_void_p(self.ftHandle), ctypes.c_char_p(data.to_bytes(byteLength, 'big')), wintypes.DWORD(byteLength))
+				return_code = lib.uartWrite(ctypes.c_void_p(self.ftHandle), ctypes.c_char_p(data.to_bytes(byteLength, 'big')), wintypes.DWORD(byteLength))
 			else:
-				lib.uartWrite(ctypes.c_void_p(self.ftHandle), ctypes.c_char_p(data.encode("utf-8")), wintypes.DWORD(len(data)))
+				return_code = lib.uartWrite(ctypes.c_void_p(self.ftHandle), ctypes.c_char_p(data.encode("utf-8")), wintypes.DWORD(len(data)))
 			
+			if return_code == 1:
+				raise Exception("UART Write Error!")
+
 		elif self.protocol == "SPI":
 			if isinstance(data, (bytes, bytearray)):	
-				lib.spiWrite(ctypes.c_void_p(self.ftHandle), ctypes.c_char_p(data), len(data))
+				return_code = lib.spiWrite(ctypes.c_void_p(self.ftHandle), ctypes.c_char_p(data), len(data))
 			elif isinstance(data, (int)):
 				byteLength = math.ceil(data.bit_length() / 8)
-				lib.spiWrite(ctypes.c_void_p(self.ftHandle), ctypes.c_char_p(data.to_bytes(byteLength, 'big')), byteLength)
+				return_code = lib.spiWrite(ctypes.c_void_p(self.ftHandle), ctypes.c_char_p(data.to_bytes(byteLength, 'big')), byteLength)
 			else:
-				lib.spiWrite(ctypes.c_void_p(self.ftHandle), ctypes.c_char_p(data.encode("utf-8")), len(data))
-		
+				return_code = lib.spiWrite(ctypes.c_void_p(self.ftHandle), ctypes.c_char_p(data.encode("utf-8")), len(data))
+
+			if return_code == 1:
+				raise Exception("SPI Write Error!")
 	
-	# reads data from device and returns as a byte array	
 	def read(self, numBytes):
 		if self.protocol == "UART":
-			data = lib.uartRead(ctypes.c_void_p(self.ftHandle), wintypes.DWORD(numBytes))
-			py_bytes = bytearray(ctypes.string_at(data, numBytes))
-			lib.freeReadBuffer(ctypes.cast(data, ctypes.c_char_p)); # frees the memory used in the c++ program to store the read buffer
+			data = (ctypes.c_char * numBytes)()
+
+			data_ptr = ctypes.cast(data, ctypes.POINTER(ctypes.c_char))
+
+			return_code = lib.uartRead(ctypes.c_void_p(self.ftHandle), wintypes.DWORD(numBytes), data_ptr)
+
+			if return_code == 1:
+				raise Exception("UART Read Error!")
+
+			py_bytes = bytearray(data.raw) 
 		
 		elif self.protocol == "SPI":
-			data = lib.spiRead(ctypes.c_void_p(self.ftHandle), numBytes)
-			py_bytes = bytearray(ctypes.string_at(data, numBytes))
-			lib.freeReadBuffer(ctypes.cast(data, ctypes.c_char_p)); # frees the memory used in the c++ program to store the read buffer
+			data = (ctypes.c_char * numBytes)()
+			data_ptr = ctypes.cast(data, ctypes.POINTER(ctypes.c_char))
+			return_code = lib.spiRead(ctypes.c_void_p(self.ftHandle), numBytes, data_ptr)
+
+			if return_code == 1:
+				raise Exception("SPI Read Error!")
+
+			py_bytes = bytearray(data.raw) 
+	
 		return py_bytes
 	
-	# configure device timouts
+	def readEEPROM(self):
+		ft_handle = ctypes.c_void_p(self.ftHandle)
+
+		manufacturer_buf = create_string_buffer(32)
+		manufacturerId_buf = create_string_buffer(16)
+		description_buf = create_string_buffer(64)
+		serialNumber_buf = create_string_buffer(16)
+
+		result = lib.read_eeprom(
+			ft_handle,
+			manufacturer_buf,
+			manufacturerId_buf,
+			description_buf,
+			serialNumber_buf
+		)
+
+		if result != 0:
+			raise Exception("EEPROM read failed!")
+
+		manufacturer = manufacturer_buf.value.decode('utf-8')
+		manufacturer_id = manufacturerId_buf.value.decode('utf-8')
+		description = description_buf.value.decode('utf-8')
+		serial_number = serialNumber_buf.value.decode('utf-8')
+
+		return {"Manufacturer": manufacturer, "Manufacturer ID": manufacturer_id, "Device": description, "Serial Number": serial_number}
+
+
+	def writeEEPROM(self, manufacturer, manufacturer_id, description, serial_number):
+		manufacturer_b = manufacturer.encode('utf-8')
+		manufacturer_id_b = manufacturer_id.encode('utf-8')
+		description_b = description.encode('utf-8')
+		serial_number_b = serial_number.encode('utf-8')
+
+		result = lib.write_eeprom(
+            ctypes.c_void_p(self.ftHandle),
+            manufacturer_b,
+            manufacturer_id_b,
+            description_b,
+            serial_number_b
+        )
+
+		if result != 0:
+			raise Exception("EEPROM write failed.")
+		
+		print("EEPROM write successful.")
+
+	def dumpEEPROM(self):
+		return_code = lib.dump_eeprom(ctypes.c_void_p(self.ftHandle))
+		if return_code == 1:
+			raise Exception("Error Dumping EEPROM!")
+	
 	def setTimeouts(self, readTimeOut, writeTimeOut):
-		lib.setTimeouts(ctypes.c_void_p(self.ftHandle), wintypes.DWORD(readTimeOut), wintypes.DWORD(writeTimeOut))
-		
-	# configure device USB parameters
+		return_code = lib.setTimeouts(ctypes.c_void_p(self.ftHandle), wintypes.DWORD(readTimeOut), wintypes.DWORD(writeTimeOut))
+		if return_code == 1:
+			raise Exception("Error Setting Timeouts!")
+
 	def setUSBParameters(self, inTransferSize, outTransferSize):
-		lib.setUSBParameters(ctypes.c_void_p(self.ftHandle), wintypes.DWORD(inTransferSize), wintypes.DWORD(outTransferSize))
-	
-	# configure device latency timer
+		return_code = lib.setUSBParameters(ctypes.c_void_p(self.ftHandle), wintypes.DWORD(inTransferSize), wintypes.DWORD(outTransferSize))
+		if return_code == 1:
+			raise Exception("Error Setting USB Parameters!")
+
 	def setLatencyTimer(self, timer):
-		lib.setLatencyTimer(ctypes.c_void_p(self.ftHandle), wintypes.CHAR(timer))
-	
-	# configure device baud rate
+		return_code = lib.setLatencyTimer(ctypes.c_void_p(self.ftHandle), wintypes.CHAR(timer))
+		if return_code == 1:
+			raise Exception("Error Setting Latency Timer!")
+			
 	def setBaudRate(self, baudRate):
-		lib.set_baud_rate(ctypes.c_void_p(self.ftHandle), baudRate)
+		return_code = lib.set_baud_rate(ctypes.c_void_p(self.ftHandle), baudRate)
+		if return_code == 1:
+			raise Exception("Error Setting Baud Rate!")
 		
-	# close connection to device
 	def close(self):
-		lib.close(ctypes.c_void_p(self.ftHandle))
-		
-		
-	
+		return_code = lib.close(ctypes.c_void_p(self.ftHandle))
+		if return_code == 1:
+			raise Exception("Error Closing Device!")
