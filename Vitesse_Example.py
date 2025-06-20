@@ -3,11 +3,11 @@ import signal
 
 ## Device Initialisation
 
-Vitesse.List_Devices()      ## Lists all available Sonobotics devices
-serial_number = 'DAC-000'   ## Serial number entry
+# Vitesse.List_Devices()      ## Lists all available Sonobotics devices
+serial_number = 'PRO-002'   ## Serial number entry
 
-spiDevice = Vitesse.Initialise()                       ## Initialises device enumerated first
-# spiDevice = Vitesse.Initialise_Ser_No(serial_number) ## Initialises device based on serial number
+# spiDevice = Vitesse.Initialise()                       ## Initialises device enumerated first
+spiDevice = Vitesse.Initialise_Ser_No(serial_number) ## Initialises device based on serial number
 
 ## Signal Parameters
 

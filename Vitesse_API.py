@@ -13,9 +13,6 @@ TRIGGER = 0
 ADC_FREQ = 50e6
 
 class Vitesse:
-    if sys.platform.startswith("win") == False:
-            os.system('sudo rmmod ftdi_sio 2>/dev/null')
-
     def Initialise():
         global maxChannels
 
