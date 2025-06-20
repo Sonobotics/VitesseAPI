@@ -13,6 +13,8 @@ The SONUS Vitesse Python API is a high-performance interface designed to integra
    - [Linux ARM Driver Installation](#linux-ARM-driver-installation)
 3. [Function Descriptions](#function-descriptions)
    - [Initialise](#initialise)
+   - [Initialise_Ser_No](#initialise_ser_no)
+   - [List_Devices](#list_devices)
    - [Change_Symbol](#change_symbol)
    - [Channel_Enable](#channel_enable)
    - [Change_Averages](#change_averages)
