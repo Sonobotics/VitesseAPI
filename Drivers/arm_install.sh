@@ -1,5 +1,6 @@
 #!/bin/bash
 cd $(pwd)/linux_arm_FTDI
+chmod +x unload_ftdi.sh
 cp 99-ftdi.rules /etc/udev/rules.d/
 tar xfvz libftd2xx-arm-v8-1.4.27.tgz
 cd release/build/
