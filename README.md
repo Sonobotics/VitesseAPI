@@ -98,6 +98,16 @@ spiDevice = Vitesse.Initialise_Ser_No(serial_number)
 
 ---
 
+### List_Devices
+Lists all connected Sonobotics devices with their device type and serial number.
+
+**Example:**
+```python
+spiDevice = Vitesse.List_Devices()
+```
+
+---
+
 ### Check_Validity
 Checks the validity of the input signal to the Vitesse, ensuring that the system does not lose synchronisation.
 
