@@ -3,11 +3,11 @@ import signal
 
 ## Device Initialisation
 
-# Vitesse.List_Devices()      ## Lists all available Sonobotics devices
-serial_number = 'PRO-002'   ## Serial number entry
+Vitesse.List_Devices()  ## Lists all available Sonobotics devices
+serial_number = '1'     ## Serial number entry
 
-# spiDevice = Vitesse.Initialise()                       ## Initialises device enumerated first
-spiDevice = Vitesse.Initialise_Ser_No(serial_number) ## Initialises device based on serial number
+spiDevice = Vitesse.Initialise()                       ## Initialises device enumerated first
+# spiDevice = Vitesse.Initialise_Ser_No(serial_number) ## Initialises device based on serial number
 
 ## Signal Parameters
 
@@ -17,7 +17,7 @@ numChips = 7           ## Chips Range = 5 to 13 (5 chips = 5 MHz, 6 chips = 4.17
                        ## (Excitation Frequency = 1 / numChips * 2 * 20e-9)
 numCycles = 2          ## Cycles Range: 1 to 3
 recordLength = 25e-6   ## Record Length Range: 0 to 100 us (8 CH), 0 to 200 us (4 CH), 0 to 800 us (8 CH)
-PRF = 5000             ## PRF Range: 1 to 5000 Hz
+PRF = 1000             ## PRF Range: 1 to 5000 Hz
 channelsOnArray = [1, 0, 0, 0, 0, 0, 0, 0] ## Channels on e.g. [Channel 1 (on/off), Channel 2(on/off), etc.]
 phaseArrayMicro = [0, 0, 0, 0, 0, 0, 0, 0] ## Phasing in microseconds for each channel e.g. [Channel 1 Phase (us), Channel 2 Phase (us), etc.]
 delayArrayMicro = [0, 0, 0, 0, 0, 0, 0, 0] ## Delay in microseconds for each channel e.g. [Channel 1 Delay (us), Channel 2 Delay (us), etc.]

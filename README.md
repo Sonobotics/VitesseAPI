@@ -70,7 +70,20 @@ sudo bash arm_install.sh
 ## Function Descriptions
 
 ### Initialise
-Initialises the SONUS Vitesse device using its serial number. If the system is not Windows, it removes conflicting drivers.
+Initialises the SONUS Vitesse device which is enumerated first.
+
+**Returns**:
+- `spiDevice` object.
+
+**Example:**
+```python
+spiDevice = Vitesse.Initialise()
+```
+
+---
+
+### Initialise_Ser_No
+Initialises the SONUS Vitesse device using its serial number.
 
 **Parameters**:
 - `serial_number` (string): Serial number of the device.
@@ -80,7 +93,7 @@ Initialises the SONUS Vitesse device using its serial number. If the system is n
 
 **Example:**
 ```python
-spiDevice = Vitesse.Initialise(serial_number)
+spiDevice = Vitesse.Initialise_Ser_No(serial_number)
 ```
 
 ---
