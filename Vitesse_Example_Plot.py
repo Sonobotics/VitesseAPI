@@ -1,5 +1,4 @@
 from Vitesse_API import Vitesse
-import signal
 import matplotlib.pyplot as plt
 
 ## Device Initialisation
@@ -38,14 +37,6 @@ Vitesse.Trigger_Phasing(spiDevice, phaseArrayMicro)
 Vitesse.Record_Delay(spiDevice, delayArrayMicro)
 print('Initialised Vitesse!\n')
 
-## Code to Check Get_Array is Complete Before Closing Device
-
-loop_complete = False
-def handle_keyboard_interrupt(signum, frame):
-    global loop_complete
-    loop_complete = True
-signal.signal(signal.SIGINT, handle_keyboard_interrupt)
-
 ## Plot Initialisation
 
 fig, ax = plt.subplots()
@@ -61,9 +52,15 @@ ax.set_ylabel('Arb. Amplitude')
 count = 0
 
 try:
-    while not loop_complete:
+    while True:
         count += 1
+
+        ## Acquiring Data
+
         array = Vitesse.Get_Array(spiDevice, numAverages, numChannelsOn, numChannelsOnArray, recordPoints, PRF)
+        if array is None:
+            print("Operation Interrupted!\n")
+            break
 
         ## Plotting Code (shows all channels in order in one graph)
 

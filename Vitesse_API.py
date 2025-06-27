@@ -1,18 +1,23 @@
 import sys
-import os
 import sonoboticsFTDI as sbftdi
 import time
 import numpy as np
-
-# message parameters
+import signal
 
 READ_DELAY = 500e-6
 MSG_BYTES = 3
 THRESHOLD_LEVEL = 0
 TRIGGER = 0
 ADC_FREQ = 50e6
+LOOP_COMPLETE = False
 
 class Vitesse:
+    def Handle_Keyboard_Interrupt(signum, frame):
+        global LOOP_COMPLETE
+        LOOP_COMPLETE = True
+
+    signal.signal(signal.SIGINT, Handle_Keyboard_Interrupt)
+
     def Initialise():
         global maxChannels
 
@@ -313,44 +318,45 @@ class Vitesse:
                 if message == 'Fail!': print(f'Record Delay (CH{8-i}): {message}\n')
 
     def Get_Array(spiDevice, num_averages, numChannelsOn, numChannelsOnArray, recordPoints, PRF):
-        spiDevice.write(b'faaaa')
-        time.sleep(num_averages/PRF)
+        while not LOOP_COMPLETE:
+            spiDevice.write(b'faaaa')
+            time.sleep(num_averages/PRF)
 
-        ByteBack = 0
+            ByteBack = 0
 
-        while ByteBack != 100:
-            Byte = spiDevice.read(1)
-            time.sleep(READ_DELAY)
-            ByteBack = np.frombuffer(Byte, dtype = np.uint8)
-            
-        if int(recordPoints*MSG_BYTES*numChannelsOn+2*numChannelsOn-1) < 64000:
-            bytesBack = spiDevice.read(int(recordPoints*MSG_BYTES*numChannelsOn+2*numChannelsOn-1))
-        else:
-            bytesBack = spiDevice.read(int((recordPoints*MSG_BYTES*numChannelsOn+2*numChannelsOn-1)/2))
-            bytesBack += spiDevice.read(int(recordPoints*MSG_BYTES*numChannelsOn+2*numChannelsOn-1)-int((recordPoints*MSG_BYTES*numChannelsOn+2*numChannelsOn-1)/2))
-
-        array = np.frombuffer(bytesBack, dtype = np.uint8)
-        array = np.insert(array, 0, 100)
-        array = np.array(array, dtype = np.float16)
-        
-        channel = np.split(array, numChannelsOn)
-        channel = [channel[1:-1] for channel in channel]
-        
-        bytearray = np.empty((numChannelsOn, recordPoints * MSG_BYTES // 3, 3), dtype=float)
-        reshapearray = np.empty((numChannelsOn, recordPoints), dtype=float)
-        normarray = np.empty((numChannelsOn, recordPoints), dtype=float)
-        echosig = np.empty((numChannelsOn, recordPoints), dtype=float)
-        
-        for i in range(numChannelsOn):
-            bytearray[i] = np.reshape(channel[i], (-1,3))
-            reshapearray[i] = bytearray[i][:,0] + bytearray[i][:,1] * (2**8) + bytearray[i][:,2] * (2**16)
-            normarray[i] = np.divide(reshapearray[i], num_averages)
-            if numChannelsOnArray[i] == 2 or numChannelsOnArray[i] == 3 or numChannelsOnArray[i] == 4 or numChannelsOnArray[i] == 5:
-                echosig[i] = np.subtract(normarray[i], 2048) * -1
+            while ByteBack != 100:
+                Byte = spiDevice.read(1)
+                time.sleep(READ_DELAY)
+                ByteBack = np.frombuffer(Byte, dtype = np.uint8)
+                
+            if int(recordPoints*MSG_BYTES*numChannelsOn+2*numChannelsOn-1) < 64000:
+                bytesBack = spiDevice.read(int(recordPoints*MSG_BYTES*numChannelsOn+2*numChannelsOn-1))
             else:
-                echosig[i] = np.subtract(normarray[i], 2048)
+                bytesBack = spiDevice.read(int((recordPoints*MSG_BYTES*numChannelsOn+2*numChannelsOn-1)/2))
+                bytesBack += spiDevice.read(int(recordPoints*MSG_BYTES*numChannelsOn+2*numChannelsOn-1)-int((recordPoints*MSG_BYTES*numChannelsOn+2*numChannelsOn-1)/2))
 
-        return echosig
+            array = np.frombuffer(bytesBack, dtype = np.uint8)
+            array = np.insert(array, 0, 100)
+            array = np.array(array, dtype = np.float16)
+            
+            channel = np.split(array, numChannelsOn)
+            channel = [channel[1:-1] for channel in channel]
+            
+            bytearray = np.empty((numChannelsOn, recordPoints * MSG_BYTES // 3, 3), dtype=float)
+            reshapearray = np.empty((numChannelsOn, recordPoints), dtype=float)
+            normarray = np.empty((numChannelsOn, recordPoints), dtype=float)
+            echosig = np.empty((numChannelsOn, recordPoints), dtype=float)
+            
+            for i in range(numChannelsOn):
+                bytearray[i] = np.reshape(channel[i], (-1,3))
+                reshapearray[i] = bytearray[i][:,0] + bytearray[i][:,1] * (2**8) + bytearray[i][:,2] * (2**16)
+                normarray[i] = np.divide(reshapearray[i], num_averages)
+                if numChannelsOnArray[i] == 2 or numChannelsOnArray[i] == 3 or numChannelsOnArray[i] == 4 or numChannelsOnArray[i] == 5:
+                    echosig[i] = np.subtract(normarray[i], 2048) * -1
+                else:
+                    echosig[i] = np.subtract(normarray[i], 2048)
+
+            return echosig
 
     def Close_Device(spiDevice):
         finalarray = [0,1,0]

@@ -286,7 +286,6 @@ Vitesse.Close_Device(spiDevice)
 ## Example Usage
 ```python
 from Vitesse_API import Vitesse
-import signal
 
 ## Device Initialisation
 
@@ -324,24 +323,22 @@ Vitesse.Trigger_Phasing(spiDevice, phaseArrayMicro)
 Vitesse.Record_Delay(spiDevice, delayArrayMicro)
 print('Initialised Vitesse!\n')
 
-## Code to Check Get_Array is Complete Before Closing Device
-
-loop_complete = False
-def handle_keyboard_interrupt(signum, frame):
-    global loop_complete
-    loop_complete = True
-signal.signal(signal.SIGINT, handle_keyboard_interrupt)
-
 ## Acquisition Loop
 
 count = 0
 
 try:
-    while not loop_complete:
+    while True:
         count += 1
+
+        ## Acquiring Data
+
         array = Vitesse.Get_Array(spiDevice, numAverages, numChannelsOn, numChannelsOnArray, recordPoints, PRF)
-        array = array.flatten()
-        print('Signal (', count, '): ', array)
+        if array is None:
+            print("\nOperation Interrupted.")
+            break
+
+        print('Signal (', count, '): ', array.flatten())
 
 finally:
     Vitesse.Close_Device(spiDevice)
