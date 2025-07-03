@@ -3,11 +3,12 @@ import matplotlib.pyplot as plt
 
 ## Device Initialisation
 
-Vitesse.List_Devices()  ## Lists all available Sonobotics devices
-serial_number = '1'     ## Serial number entry
+V = Vitesse()       ## Instantiates Vitesse instance
+V.List_Devices()    ## Lists all available Sonobotics devices
+V.Initialise()      ## Initialises device enumerated first
 
-spiDevice = Vitesse.Initialise()                       ## Initialises device enumerated first
-# spiDevice = Vitesse.Initialise_Ser_No(serial_number) ## Initialises device based on serial number
+serial_number = '1'                  ## Serial number entry
+# V.Initialise_Ser_No(serial_number) ## Initialises device based on serial number
 
 ## Signal Parameters
 
@@ -24,17 +25,17 @@ delayArrayMicro = [0, 0, 0, 0, 0, 0, 0, 0] ## Delay in microseconds for each cha
 
 ## Checking Validity of Signal Settings
 
-Vitesse.Check_Validity(phaseArrayMicro, delayArrayMicro, recordLength, PRF)
+V.Check_Validity(phaseArrayMicro, delayArrayMicro, recordLength, PRF)
 
 ## Settings Initialised on Vitesse
 
-numChannelsOn, numChannelsOnArray = Vitesse.Channel_Enable(spiDevice, channelsOnArray)
-Vitesse.Change_Symbol(spiDevice, numChips, numCycles)
-Vitesse.Change_Averages(spiDevice, numAverages)
-Vitesse.Change_PRF(spiDevice, PRF)
-recordPoints = Vitesse.Change_Record_Length(spiDevice, recordLength)
-Vitesse.Trigger_Phasing(spiDevice, phaseArrayMicro)
-Vitesse.Record_Delay(spiDevice, delayArrayMicro)
+V.Channel_Enable(channelsOnArray)
+V.Change_Symbol(numChips, numCycles)
+V.Change_Averages(numAverages)
+V.Change_PRF(PRF)
+V.Change_Record_Length(recordLength)
+V.Trigger_Phasing(phaseArrayMicro)
+V.Record_Delay(delayArrayMicro)
 print('Initialised Vitesse!\n')
 
 ## Plot Initialisation
@@ -42,7 +43,7 @@ print('Initialised Vitesse!\n')
 fig, ax = plt.subplots()
 ln1, = plt.plot([], [])
 x_data1, y_data1 = [], []
-ax.set_xlim(0, recordPoints*numChannelsOn)
+ax.set_xlim(0, V.recordPoints*V.numChannelsOn)
 ax.set_ylim(-2048, 2048)
 ax.set_xlabel('Time')
 ax.set_ylabel('Arb. Amplitude')
@@ -53,23 +54,18 @@ count = 0
 
 try:
     while True:
-        count += 1
-
         ## Acquiring Data
-
-        array = Vitesse.Get_Array(spiDevice, numAverages, numChannelsOn, numChannelsOnArray, recordPoints, PRF)
-        if array is None:
-            print("Operation Interrupted!\n")
-            break
+        count += 1
+        array = V.Get_Array()
 
         ## Plotting Code (shows all channels in order in one graph)
-
         array = array.flatten()
         x_data1 = range(0, len(array))
         y_data1 = array
         ln1.set_data(x_data1, y_data1)
         plt.pause(0.001)
-
+except KeyboardInterrupt:
+    print('Operation Interrupted.\n')
 finally:
-    Vitesse.Close_Device(spiDevice)
+    V.Close_Device()
     print('Device Closed!\n')

@@ -18,7 +18,6 @@ elif platform.machine() == 'aarch64':
 	lib = ctypes.CDLL("./Libraries/ftdiHandler.so")
 	subprocess.run(["sudo", "./Drivers/linux_arm_FTDI/unload_ftdi.sh"], check=True)
 	os.system('sudo rmmod ftdi_sio 2>/dev/null')
-	
 else:
 	print('Incompatible with this operating system!')
 	sys.exit(0)

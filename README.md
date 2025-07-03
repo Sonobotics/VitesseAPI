@@ -79,7 +79,8 @@ Initialises the SONUS Vitesse device which is enumerated first.
 
 **Example:**
 ```python
-spiDevice = Vitesse.Initialise()
+V = Vitesse()
+V.Initialise()
 ```
 
 ---
@@ -90,12 +91,9 @@ Initialises the SONUS Vitesse device using its serial number.
 **Parameters**:
 - `serial_number` (string): Serial number of the device.
 
-**Returns**:
-- `spiDevice` object.
-
 **Example:**
 ```python
-spiDevice = Vitesse.Initialise_Ser_No(serial_number)
+V.Initialise_Ser_No(serial_number)
 ```
 
 ---
@@ -105,7 +103,7 @@ Lists all connected Sonobotics devices with their device type and serial number.
 
 **Example:**
 ```python
-spiDevice = Vitesse.List_Devices()
+V.List_Devices()
 ```
 
 ---
@@ -119,12 +117,9 @@ Checks the validity of the input signal to the Vitesse, ensuring that the system
 - `recordLength`: Length of recording in seconds.
 - `PRF`: Desired PRF in Hz.
 
-**Returns**:
-- `spiDevice` object.
-
 **Example:**
 ```python
-Vitesse.Check_Validity(phaseArrayMicro, delayArrayMicro, recordLength, PRF)
+V.Check_Validity(phaseArrayMicro, delayArrayMicro, recordLength, PRF)
 ```
 
 ---
@@ -133,7 +128,6 @@ Vitesse.Check_Validity(phaseArrayMicro, delayArrayMicro, recordLength, PRF)
 Configures the device excitation symbol parameters.
 
 **Parameters**:
-- `spiDevice`: Device object returned by `Initialise`.
 - `num_chips`: Number of chips to be set.
 - `num_cycles`: Number of cycles for the symbol.
 
@@ -143,7 +137,7 @@ Configures the device excitation symbol parameters.
 
 **Example:**
 ```python
-Vitesse.Change_Symbol(spiDevice, 4, 8)
+V.Change_Symbol(4, 8)
 ```
 
 ---
@@ -152,16 +146,11 @@ Vitesse.Change_Symbol(spiDevice, 4, 8)
 Activates specific channels on the device.
 
 **Parameters**:
-- `spiDevice`: Device object returned by `Initialise`.
 - `channelsOnArray`: List of integers representing channels to enable (1 = ON, 0 = OFF).
-
-**Returns**:
-- `numChannelsOn` (int): Number of active channels.
-- `numChannelsOnArray` (list): List of indices of active channels.
 
 **Example:**
 ```python
-numChannelsOn, numChannelsOnArray = Vitesse.Channel_Enable(spiDevice, [1, 0, 1, 0, 1, 0, 0, 1])
+V.Channel_Enable([1, 0, 1, 0, 1, 0, 0, 1])
 ```
 
 ---
@@ -170,7 +159,6 @@ numChannelsOn, numChannelsOnArray = Vitesse.Channel_Enable(spiDevice, [1, 0, 1, 
 Configures the number of averaging cycles.
 
 **Parameters**:
-- `spiDevice`: Device object returned by `Initialise`.
 - `num_averages`: Integer representing the number of averages.
 
 **Range:**
@@ -178,7 +166,7 @@ Configures the number of averaging cycles.
 
 **Example:**
 ```python
-Vitesse.Change_Averages(spiDevice, 16)
+V.Change_Averages(16)
 ```
 
 ---
@@ -187,16 +175,14 @@ Vitesse.Change_Averages(spiDevice, 16)
 Sets the Pulse Repetition Frequency (PRF).
 
 **Parameters**:
-- `spiDevice`: Device object returned by `Initialise`.
 - `PRF`: Desired PRF in Hz.
-- `adcFreq`: ADC clock frequency in Hz.
 
 **Range:**
 - `PRF`: 1 to 5000.
 
 **Example:**
 ```python
-Vitesse.Change_PRF(spiDevice, 1000, 30e6)
+V.Change_PRF(1000, 30e6)
 ```
 
 ---
@@ -205,16 +191,11 @@ Vitesse.Change_PRF(spiDevice, 1000, 30e6)
 Configures the length of the data recording.
 
 **Parameters**:
-- `spiDevice`: Device object returned by `Initialise`.
 - `recordLength`: Length of recording in seconds.
-- `adcFreq`: ADC clock frequency in Hz.
-
-**Returns**:
-- `recordPoints` (int): Total number of data points recorded.
 
 **Example:**
 ```python
-recordPoints = Vitesse.Change_Record_Length(spiDevice, 100e-6, 30e6)
+V.Change_Record_Length(100e-6)
 ```
 
 ---
@@ -223,13 +204,11 @@ recordPoints = Vitesse.Change_Record_Length(spiDevice, 100e-6, 30e6)
 Sets the trigger phasing for the channels.
 
 **Parameters**:
-- `spiDevice`: Device object returned by `Initialise`.
 - `phaseArrayMicro`: List of phase values in microseconds for each channel.
-- `adcFreq`: ADC clock frequency in Hz.
 
 **Example:**
 ```python
-Vitesse.Trigger_Phasing(spiDevice, [5, 3.2, 1, 0, 0, 0, 8, 0.5], 30e6)
+V.Trigger_Phasing([5, 3.2, 1, 0, 0, 0, 8, 0.5])
 ```
 
 ---
@@ -238,13 +217,11 @@ Vitesse.Trigger_Phasing(spiDevice, [5, 3.2, 1, 0, 0, 0, 8, 0.5], 30e6)
 Configures recording delays for each channel.
 
 **Parameters**:
-- `spiDevice`: Device object returned by `Initialise`.
 - `delayArrayMicro`: List of delay values in microseconds for each channel.
-- `adcFreq`: ADC clock frequency in Hz.
 
 **Example:**
 ```python
-Vitesse.Record_Delay(spiDevice, [5, 3.2, 1, 0, 0, 0, 8, 0.5], 30e6)
+V.Record_Delay([5, 3.2, 1, 0, 0, 0, 8, 0.5])
 ```
 
 ---
@@ -252,20 +229,12 @@ Vitesse.Record_Delay(spiDevice, [5, 3.2, 1, 0, 0, 0, 8, 0.5], 30e6)
 ### Get_Array
 Acquires the processed signal array from the device.
 
-**Parameters**:
-- `spiDevice`: Device object returned by `Initialise`.
-- `num_averages`: Number of averaging cycles.
-- `numChannelsOn`: Number of active channels.
-- `numChannelsOnArray`: List of active channel indices.
-- `recordPoints`: Total number of data points recorded.
-- `PRF`: Pulse Repetition Frequency in Hz.
-
 **Returns**:
 - `echosig` (array): Normalised and processed signal array.
 
 **Example:**
 ```python
-data = Vitesse.Get_Array(spiDevice, 100, 8, [0, 1, 2, 3, 4, 5, 6, 7], 1000, 1000)
+ascan = V.Get_Array()
 ```
 
 ---
@@ -273,12 +242,9 @@ data = Vitesse.Get_Array(spiDevice, 100, 8, [0, 1, 2, 3, 4, 5, 6, 7], 1000, 1000
 ### Close_Device
 Closes the SPI connection with the device and clears the read buffer.
 
-**Parameters**:
-- `spiDevice`: Device object returned by `Initialise`.
-
 **Example:**
 ```python
-Vitesse.Close_Device(spiDevice)
+V.Close_Device()
 ```
 
 ---
@@ -289,11 +255,12 @@ from Vitesse_API import Vitesse
 
 ## Device Initialisation
 
-Vitesse.List_Devices()  ## Lists all available Sonobotics devices
-serial_number = '1'     ## Serial number entry
+V = Vitesse()       ## Instantiates Vitesse instance
+V.List_Devices()    ## Lists all available Sonobotics devices
+V.Initialise()      ## Initialises device enumerated first
 
-spiDevice = Vitesse.Initialise()                       ## Initialises device enumerated first
-# spiDevice = Vitesse.Initialise_Ser_No(serial_number) ## Initialises device based on serial number
+serial_number = '1'                  ## Serial number entry
+# V.Initialise_Ser_No(serial_number) ## Initialises device based on serial number
 
 ## Signal Parameters
 
@@ -310,17 +277,17 @@ delayArrayMicro = [0, 0, 0, 0, 0, 0, 0, 0] ## Delay in microseconds for each cha
 
 ## Checking Validity of Signal Settings
 
-Vitesse.Check_Validity(phaseArrayMicro, delayArrayMicro, recordLength, PRF)
+V.Check_Validity(phaseArrayMicro, delayArrayMicro, recordLength, PRF)
 
 ## Settings Initialised on Vitesse
 
-numChannelsOn, numChannelsOnArray = Vitesse.Channel_Enable(spiDevice, channelsOnArray)
-Vitesse.Change_Symbol(spiDevice, numChips, numCycles)
-Vitesse.Change_Averages(spiDevice, numAverages)
-Vitesse.Change_PRF(spiDevice, PRF)
-recordPoints = Vitesse.Change_Record_Length(spiDevice, recordLength)
-Vitesse.Trigger_Phasing(spiDevice, phaseArrayMicro)
-Vitesse.Record_Delay(spiDevice, delayArrayMicro)
+V.Channel_Enable(channelsOnArray)
+V.Change_Symbol(numChips, numCycles)
+V.Change_Averages(numAverages)
+V.Change_PRF(PRF)
+V.Change_Record_Length(recordLength)
+V.Trigger_Phasing(phaseArrayMicro)
+V.Record_Delay(delayArrayMicro)
 print('Initialised Vitesse!\n')
 
 ## Acquisition Loop
@@ -329,19 +296,14 @@ count = 0
 
 try:
     while True:
-        count += 1
-
         ## Acquiring Data
-
-        array = Vitesse.Get_Array(spiDevice, numAverages, numChannelsOn, numChannelsOnArray, recordPoints, PRF)
-        if array is None:
-            print("\nOperation Interrupted.")
-            break
-
+        count += 1
+        array = V.Get_Array()
         print('Signal (', count, '): ', array.flatten())
-
+except KeyboardInterrupt:
+    print('\nOperation Interrupted.')
 finally:
-    Vitesse.Close_Device(spiDevice)
+    V.Close_Device()
     print('\nDevice Closed!\n')
 ```
 
