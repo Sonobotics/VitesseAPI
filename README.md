@@ -74,9 +74,6 @@ sudo bash arm_install.sh
 ### Initialise
 Initialises the SONUS Vitesse device which is enumerated first.
 
-**Returns**:
-- `spiDevice` object.
-
 **Example:**
 ```python
 V = Vitesse()
@@ -182,7 +179,7 @@ Sets the Pulse Repetition Frequency (PRF).
 
 **Example:**
 ```python
-V.Change_PRF(1000, 30e6)
+V.Change_PRF(1000)
 ```
 
 ---
