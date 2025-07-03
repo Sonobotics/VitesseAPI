@@ -69,6 +69,10 @@ class Vitesse:
 
         eepromData = self.spiDevice.readEEPROM()
 
+        initialarray = [0,0,0]
+        while initialarray[-1] != 200 or initialarray[-2] != 200 or initialarray[-3] != 200:
+            initialarray = np.frombuffer(self.spiDevice.read(1000), dtype = np.uint8)
+
         print('\n-----------Selected Device:-----------')
 
         for key in ['Device','Serial Number']:
