@@ -49,8 +49,8 @@ pip install -r requirements.txt
 
 To install the drivers for Windows, navigate to the 'Drivers' folder, open the 'windows_FTDI' folder and run the executable within it.
 
->[NOTE!]
->If you have issues finding the .dll file when running the API, run the windows_install.bat in the 'Drivers' folder. This issue comes in the form of 'FileNotFoundError: Could not find module 'C:\path\to\installation\folder\ftdiHandler.dll' (or one of its dependencies). Try using the full path with constructor syntax.'
+> [!NOTE]
+> If you have issues finding the .dll file when running the API, run the windows_install.bat in the 'Drivers' folder. This issue comes in the form of 'FileNotFoundError: Could not find module 'C:\path\to\installation\folder\ftdiHandler.dll' (or one of its dependencies). Try using the full path with constructor syntax.'
 
 ### Linux x86_64 Driver Installation
 
