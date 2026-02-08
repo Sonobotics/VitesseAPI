@@ -1,316 +1,524 @@
 # SONUS Vitesse Python API
 
-The SONUS Vitesse Python API is a high-performance interface designed to integrate and control the Sonobotics SONUS Vitesse data acquisition system through Python. This API enables users to configure the device, acquire data, and perform advanced operations seamlessly. Below is a comprehensive guide to the available functions and their usage.
-
----
+The SONUS Vitesse Python API is a high-performance interface designed to integrate and control the Sonobotics SONUS Vitesse data acquisition system through Python. This API enables users to configure the device, acquire data, and perform advanced operations seamlessly.
 
 ## Table of Contents
 1. [Introduction](#introduction)
-2. [Setup and Initialisation](#setup-and-initialisation)
-   - [Python and Git Installation](#python-and-git-installation)
-   - [Windows Driver Installation](#windows_driver_installation)
-   - [Linux x86_64 Driver Installation](#linux-x86_64-driver-installation)
-   - [Linux ARM Driver Installation](#linux-ARM-driver-installation)
-3. [Function Descriptions](#function-descriptions)
-   - [Initialise](#initialise)
-   - [Initialise_Ser_No](#initialise_ser_no)
-   - [List_Devices](#list_devices)
-   - [Change_Symbol](#change_symbol)
-   - [Channel_Enable](#channel_enable)
-   - [Change_Averages](#change_averages)
-   - [Change_PRF](#change_prf)
-   - [Change_Record_Length](#change_record_length)
-   - [Trigger_Phasing](#trigger_phasing)
-   - [Record_Delay](#record_delay)
-   - [Get_Array](#get_array)
-   - [Close_Device](#close_device)
-
----
+2. [Installation](#installation)
+   - [Prerequisites](#prerequisites)
+   - [Driver Installation](#driver-installation)
+3. [Quick Start](#quick-start)
+4. [Key Features](#key-features)
+   - [Context Manager Support](#context-manager-support)
+   - [Method Chaining](#method-chaining)
+5. [API Reference](#api-reference)
+   - [Vitesse Class](#vitesse-class)
+   - [Methods](#methods)
+6. [Examples](#examples)
 
 ## Introduction
 
-The SONUS Vitesse Python API allows users to directly interact with the SONUS Vitesse data acquisition system for customised data manipulation. It provides high-speed functionality for configuring channels, setting parameters, and retrieving processed data in Python for further analysis.
+The SONUS Vitesse Python API provides a comprehensive interface for the SONUS Vitesse data acquisition system, offering high-speed functionality for configuring channels, setting parameters, and retrieving processed ultrasonic data in Python for further analysis.
 
----
+## Installation
 
-## Setup and Initialisation
+### Prerequisites
 
-### Python and Git Installation
+1. Python 3.x (Tested with Python 3.12.3; Python 3.9+ strongly recommended)
+2. Required packages:
+   ```bash
+   pip install -r requirements.txt
+   ```
 
-To install the API on your system, firstly download Python from https://www.python.org/downloads/ and Git from https://git-scm.com/downloads. Then, once these steps are complete, clone the VitesseAPI github onto your system using the below steps:
+### Driver Installation
 
-```bash
-git clone https://github.com/SONOBOTICS-paddy/VitesseAPI.git
-cd VitesseAPI
-pip install -r requirements.txt
+#### Windows
+Navigate to the `drivers/windows_FTDI` folder and run the executable:
+```
+CDM212364_Setup.exe
 ```
 
-### Windows Driver Installation
-
-To install the drivers for Windows, navigate to the 'Drivers' folder, open the 'windows_FTDI' folder and run the executable within it.
-
-> [!NOTE]
-> If you have issues finding the .dll file when running the API, run the windows_install.bat in the 'Drivers' folder. This issue comes in the form of:
->```bash
-> FileNotFoundError: Could not find module 'C:\path\to\installation\folder\ftdiHandler.dll' (or one of its dependencies). Try using the full path with constructor syntax.
->```
-
-### Linux x86_64 Driver Installation
-
-To install the drivers for an x86_64 Linux computer, navigate to the 'VitesseAPI' folder and run the following commands:
-
+#### Linux x86_64
+Navigate to the VitesseAPI folder and run:
 ```bash
-cd Drivers
+cd drivers
 sudo bash x86_64_install.sh
 ```
 
-### Linux ARM Driver Installation
-
-To install the drivers for an ARM Linux computer, navigate to the 'VitesseAPI' folder and run the following commands:
-
+#### Linux ARM
+Navigate to the VitesseAPI folder and run:
 ```bash
-cd Drivers
+cd drivers
 sudo bash arm_install.sh
 ```
 
----
+## Quick Start
 
-## Function Descriptions
+### Recommended: Using Context Manager
+```python
+from VitesseAPI import initialiseVitesse
 
-### Initialise
-Initialises the SONUS Vitesse device which is enumerated first.
+# Using context manager ensures proper cleanup
+with initialiseVitesse() as V:
+    V.listDevices()  # List all connected devices
+
+    # Acquire data
+    array = V.getArray()
+    print(f"Acquired data shape: {array.shape}")
+    # Device automatically closes when exiting the context
+```
+
+### Traditional Approach
+```python
+from VitesseAPI import Vitesse
+
+# Initialize device
+V = Vitesse()
+V.listDevices()  # List all connected devices
+V.initialise()   # Initialize the first available device
+
+# Acquire data
+array = V.getArray()
+print(f"Acquired data shape: {array.shape}")
+
+# Finally, close the device
+V.closeDevice()
+```
+
+## Key Features
+
+### Context Manager Support
+
+The Vitesse class implements Python's context manager protocol, allowing you to use it with the `with` statement. This ensures that the device connection is properly closed even if an error occurs during operation.
+
+**Benefits:**
+- Automatic cleanup of device resources
+- Exception-safe operation
+- Cleaner, more Pythonic code
+- Prevents resource leaks
 
 **Example:**
+```python
+from VitesseAPI import Vitesse
+
+with Vitesse().initialise() as V:
+    data = V.getArray()
+    # Device automatically closes when exiting this block
+    # Even if an exception occurs!
+```
+
+or you could do
+
+```python
+from VitesseAPI import initialiseVitesse
+
+with initialiseVitesse() as V:
+    data = V.getArray()
+    # Device automatically closes when exiting this block
+    # Even if an exception occurs!
+```
+
+### Method Chaining
+
+All configuration methods return `self`, allowing you to chain multiple method calls together. This makes configuration more concise and readable.
+
+**Example:**
+```python
+with Vitesse().initialise() as V:
+    # Chain multiple configuration calls
+    V.setAverages(100) \
+     .setPrf(1000) \
+     .setRecordLength(50e-6)
+    
+    # Or use setConfig for all-in-one configuration with chaining
+    V.setConfig(
+        opFrequency=3.6e6,
+        channelsOnDrive=[1,0,0,0,0,0,0,0],
+        channelsOnReceive=[1,0,0,0,0,0,0,0],
+        numAverages=100,
+        PRF=1000,
+        recordLength=50e-6
+    )
+```
+
+## API Reference
+
+### Vitesse Class
+
+The main class for interacting with the SONUS Vitesse device.
+
+#### Constructor
 ```python
 V = Vitesse()
-V.Initialise()
 ```
 
----
+### Methods
 
-### Initialise_Ser_No
-Initialises the SONUS Vitesse device using its serial number.
+#### `initialise(serialNumber: str | None = None) -> Self`
+Initializes a connected Vitesse device.
 
-**Parameters**:
-- `serial_number` (string): Serial number of the device.
+**Parameters:**
+- `serialNumber` (optional): The serial number of the specific device to connect to. If not provided, connects to the first available device.
+
+**Returns:**
+- `Self`: Returns the instance for method chaining.
 
 **Example:**
 ```python
-V.Initialise_Ser_No(serial_number)
+V.initialise()  # Connect to first available device
+# or
+V.initialise("12345")  # Connect to specific device
+# With chaining
+V.initialise().setConfig()  # Initialize and configure in one line
 ```
 
----
+#### `listDevices() -> list[tuple[str, str, int]]`
+Lists all connected Vitesse devices.
 
-### List_Devices
-Lists all connected Sonobotics devices with their device type and serial number.
+**Returns:**
+List of tuples containing (serialNumber, deviceName, numberOfChannels)
 
 **Example:**
 ```python
-V.List_Devices()
+devices = V.listDevices()
+for serial, name, channels in devices:
+    print(f"Device: {name}, Serial: {serial}, Channels: {channels}")
 ```
 
----
+#### `setConfig(self, numCycles: int = 2, channelsOnReceive: list[int] = [1, 0, 0, 0, 0, 0, 0, 0], channelsOnDrive: list[int] = [1, 0, 0, 0, 0, 0, 0, 0], PRF: int = 1000, numAverages: int = 100, recordLength: float = 50e-6, phaseArrayMicro: list[int] = [0, 0, 0, 0, 0, 0, 0, 0], delayArrayMicro: list[int] = [0, 0, 0, 0, 0, 0, 0, 0], peripheralsOnArray: list[int] = [0, 0, 0, 0, 0, 0, 0, 0], samplingMode: int = 24, pulseFrequency: int = int(200e6), opFrequency: int = int(3.6e6), encoder_wheelbase: int = int(40), encoder_radius: int = int(39.8/2), encoder_CPR: int = int(2048), targetClock: int = int(50e6) ) -> Self:`
+Configures all device parameters at once.
 
-### Check_Validity
-Checks the validity of the input signal to the Vitesse, ensuring that the system does not lose synchronisation.
+**Returns:**
+- `Self`: Returns the instance for method chaining.
 
-**Parameters**:
-- `phaseArrayMicro`: List of phase values in microseconds for each channel.
-- `delayArrayMicro`: List of delay values in microseconds for each channel.
-- `recordLength`: Length of recording in seconds.
-- `PRF`: Desired PRF in Hz.
+**Parameters:**
+- `channelsOnArray`: List of 0s and 1s indicating which channels to enable
+- `numAverages` (1-1000): Number of averages for data acquisition
+- `PRF` (1-5000): Pulse Repetition Frequency in Hz
+- `recordLength`: Recording length in seconds
+- `phaseArrayMicro`: Phase delays in microseconds for each channel
+- `delayArrayMicro`: Record delays in microseconds for each channel
+- `numCycles` (1-3): Number of cycles per symbol
+- `channelsOnReceive`: List of 0s and 1s indicating which receiver channels to enable
+- `channelsOnDrive`: List of 0s and 1s indicating which driver channels to enable
+- `PRF` (1-5000): Pulse Repetition Frequency in Hz
+- `numAverages` (1-1000): Number of averages for data acquisition
+- `recordLength`: Recording length in seconds
+- `phaseArrayMicro`: Phase delays in microseconds for each channel
+- `delayArrayMicro`: Record delays in microseconds for each channel
+- `peripheralsOnArray`: list[int] = [0, 0, 0, 0, 0, 0, 0, 0],
+- `samplingMode`: Packet size of acquired data (24 or 16 bit)
+- `pulseFrequency`: Sampling frequency of drive signal in Hz
+- `opFrequency`: Excitation frequency in Hz
+- `encoder_wheelbase`: Wheelbase between encoders in mm
+- `wheel_radius`: Radius of wheels in mm
+- `encoder_CPR`: Encoder CPR (counts per revolution)
+- `targetClock`: ADC sampling frequency in Hz
+
+#### `checkValidity(phaseArrayMicro: list[int] | None = None, delayArrayMicro: list[int] | None = None, recordLength: float | None = None, PRF: int | None = None) -> Self`
+Validates the configuration parameters to ensure they don't violate timing constraints.
+
+If no value is given for a parameter, the current value stored in the instance will be used.
+
+**Returns:**
+- `Self`: Returns the instance for method chaining.
+
+**Raises:**
+- `ValueError` if configuration is invalid
+
+#### `setSymbol(num_chips: int, num_cycles: int) -> Self`
+Configures the excitation symbol parameters.
+
+**Parameters:**
+- `num_chips` (5-13): Determines number of chips
+- `num_cycles` (1-3): Number of cycles per symbol
+
+**Returns:**
+- `Self`: Returns the instance for method chaining.
+
+#### `setChannelDrive(self, channelsOnDrive: list[int]) -> Self:`
+Enables or disables specific driver channels.
+
+**Parameters:**
+- `channelsOnDrive`: List of 8 integers (0 or 1) for channels 1-8
 
 **Example:**
 ```python
-V.Check_Validity(phaseArrayMicro, delayArrayMicro, recordLength, PRF)
+V.setChannelDrive([1, 1, 0, 0, 0, 0, 0, 0])  # Enable driver channels 1 and 2
 ```
 
----
+**Returns:**
+- `Self`: Returns the instance for method chaining.
 
-### Change_Symbol
-Configures the device excitation symbol parameters.
+#### `setChannelReceive(self, channelsOnReceive: list[int]) -> Self:`
+Enables or disables specific receiver channels.
 
-**Parameters**:
-- `num_chips`: Number of chips to be set.
-- `num_cycles`: Number of cycles for the symbol.
-
-**Range:**
-- `num_chips`: 5 to 13.
-- `num_cycles`: 1 to 3.
+**Parameters:**
+- `channelsOnReceive`: List of 8 integers (0 or 1) for channels 1-8
 
 **Example:**
 ```python
-V.Change_Symbol(4, 8)
+V.setChannelReceive([1, 1, 0, 0, 0, 0, 0, 0])  # Enable receiver channels 1 and 2
 ```
 
----
+**Returns:**
+- `Self`: Returns the instance for method chaining.
 
-### Channel_Enable
-Activates specific channels on the device.
+#### `setAverages(numAverages: int) -> Self`
+Sets the number of averages for noise reduction.
 
-**Parameters**:
-- `channelsOnArray`: List of integers representing channels to enable (1 = ON, 0 = OFF).
+**Parameters:**
+- `numAverages` (1-1000): Number of acquisitions to average
+
+**Returns:**
+- `Self`: Returns the instance for method chaining.
+
+#### `setPrf(PRF: int) -> Self`
+Sets the Pulse Repetition Frequency.
+
+**Parameters:**
+- `PRF` (1-20000): Frequency in Hz
+
+**Returns:**
+- `Self`: Returns the instance for method chaining.
+
+#### `setRecordLength(recordLength: float) -> Self`
+Sets the recording window length.
+
+**Parameters:**
+- `recordLength`: Length in seconds
+  - 8 channels: 0-100 μs
+  - 4 channels: 0-200 μs
+  - 1 channel: 0-800 μs
+
+**Returns:**
+- `Self`: Returns the instance for method chaining.
+
+#### `setTriggerPhasing(phaseArrayMicro: list[int]) -> Self`
+Sets trigger phase delays for beam steering.
+
+**Parameters:**
+- `phaseArrayMicro`: List of 8 phase delays in microseconds
+
+**Returns:**
+- `Self`: Returns the instance for method chaining.
+
+#### `setRecordDelay(delayArrayMicro: list[int]) -> Self`
+Sets recording delays for each channel.
+
+**Parameters:**
+- `delayArrayMicro`: List of 8 delay values in microseconds
+
+**Returns:**
+- `Self`: Returns the instance for method chaining.
+
+#### `getArray(self) -> np.ndarray[tuple[int, int], np.dtype[np.float64]]`
+Acquires data from the device.
+
+**Returns:**
+- 2D numpy array with shape (numChannelsOn, recordPoints)
+- Each row contains data from one enabled channel
 
 **Example:**
 ```python
-V.Channel_Enable([1, 0, 1, 0, 1, 0, 0, 1])
+data = V.getArray()
+print(f"Data shape: {data.shape}")
+print(f"Channel 1 data: {data[0]}")
 ```
 
----
+#### `closeDevice() -> None`
+Safely closes the device connection. It is strongly recommended to always call closeDevice() before end of session.
 
-### Change_Averages
-Configures the number of averaging cycles.
+## Examples
 
-**Parameters**:
-- `num_averages`: Integer representing the number of averages.
-
-**Range:**
-- `num_averages`: 1 to 1000.
-
-**Example:**
+### Basic Data Acquisition
 ```python
-V.Change_Averages(16)
+from VitesseAPI import Vitesse
+
+# Using context manager for automatic cleanup
+with Vitesse().initialise() as V:
+    devices = V.listDevices()
+    print(f"Found {len(devices)} devices")
+    
+    # Configure for single channel, high-speed acquisition using method chaining
+    V.setConfig(
+        opFrequency=3.6e6,
+        channelsOnDrive=[1,0,0,0,0,0,0,0],
+        channelsOnReceive=[1,0,0,0,0,0,0,0],
+        numAverages=100,
+        PRF=1000,
+        recordLength=50e-6
+    )
+    
+    # Acquire 10 datasets
+    for i in range(10):
+        data = V.getArray()
+        print(f"Acquisition {i+1}: {data.flatten()}")
+    # Device automatically closes when exiting the context
 ```
 
----
-
-### Change_PRF
-Sets the Pulse Repetition Frequency (PRF).
-
-**Parameters**:
-- `PRF`: Desired PRF in Hz.
-
-**Range:**
-- `PRF`: 1 to 5000.
-
-**Example:**
+### Multi-Channel with Phasing
 ```python
-V.Change_PRF(1000)
+from VitesseAPI import Vitesse
+import matplotlib.pyplot as plt
+
+with Vitesse().initialise() as V:
+    # Enable 4 channels with phased array configuration using method chaining
+    V.setConfig(
+        channelsOnDrive=[1,1,1,1,0,0,0,0],     # Channels 1-4
+        channelsOnReceive=[1,1,1,1,0,0,0,0],     # Channels 1-4
+        phaseArrayMicro=[0, 0.5, 1.0, 1.5, 0, 0, 0, 0],  # Linear phasing
+        recordLength=50e-6
+    ).setAverages(100)  # Chain additional configuration
+    
+    # Acquire and plot
+    data = V.getArray()
+    
+    plt.figure(figsize=(10, 6))
+    for i in range(4):
+        plt.subplot(2, 2, i+1)
+        plt.plot(data[i])
+        plt.title(f"Channel {i+1}")
+        plt.xlabel("Sample")
+        plt.ylabel("Amplitude")
+    plt.tight_layout()
+    plt.show()
 ```
 
----
-
-### Change_Record_Length
-Configures the length of the data recording.
-
-**Parameters**:
-- `recordLength`: Length of recording in seconds.
-
-**Example:**
+### Real-Time Plotting
 ```python
-V.Change_Record_Length(100e-6)
+from VitesseAPI import Vitesse
+import matplotlib.pyplot as plt
+from VitesseAPI.utils import getConfig, getVersion
+
+# Using context manager ensures device closes even on KeyboardInterrupt
+with Vitesse().initialise() as V:
+    
+    # Configure parameters with method chaining
+    V.setConfig(
+        opFrequency=3.6e6,
+        channelsOnDrive=[1,0,0,0,0,0,0,0],
+        channelsOnReceive=[1,0,0,0,0,0,0,0],
+        numAverages=100,
+        PRF=1000,
+        recordLength=50e-6
+    )
+    
+    # Print version and config for verification
+    getVersion(V)
+    getConfig(V)
+
+    # Setup plot
+    fig, ax = plt.subplots()
+    ln1, = plt.plot([], [])
+    ax.set_xlim(0, V.recordPoints*V.numChannelsOnReceive)
+    ax.set_ylim(-2048, 2048)
+    ax.set_xlabel('Time')
+    ax.set_ylabel('Arb. Amplitude')
+    
+    # Real-time acquisition loop
+    try:
+        while True:
+            array = V.getArray()
+            array = array.flatten()
+            x_data = range(0, len(array))
+            ln1.set_data(x_data, array)
+            plt.pause(0.001)
+    except KeyboardInterrupt:
+        print('Operation Interrupted.')
+    # Device automatically closes when exiting the context
+    print('Device Closed!')
 ```
 
----
-
-### Trigger_Phasing
-Sets the trigger phasing for the channels.
-
-**Parameters**:
-- `phaseArrayMicro`: List of phase values in microseconds for each channel.
-
-**Example:**
+### Real-Time Plotting with Simulated Data
 ```python
-V.Trigger_Phasing([5, 3.2, 1, 0, 0, 0, 8, 0.5])
+from VitesseAPI import Vitesse
+import matplotlib.pyplot as plt
+
+# Using context manager ensures device closes even on KeyboardInterrupt
+with Vitesse().initialise(simulation=True) as V:
+    
+    # Configure parameters with method chaining
+    V.setConfig(
+        opFrequency=3.6e6,
+        channelsOnDrive=[1,0,0,0,0,0,0,0],
+        channelsOnReceive=[1,0,0,0,0,0,0,0],
+        numAverages=100,
+        PRF=1000,
+        recordLength=50e-6
+    )
+    
+    # Setup plot
+    fig, ax = plt.subplots()
+    ln1, = plt.plot([], [])
+    ax.set_xlim(0, V.recordPoints*V.numChannelsOnReceive)
+    ax.set_ylim(-2048, 2048)
+    ax.set_xlabel('Time')
+    ax.set_ylabel('Arb. Amplitude')
+    
+    # Real-time acquisition loop
+    try:
+        while True:
+            array = V.getArray()
+            array = array.flatten()
+            x_data = range(0, len(array))
+            ln1.set_data(x_data, array)
+            plt.pause(0.001)
+    except KeyboardInterrupt:
+        print('Operation Interrupted.')
+    # Device automatically closes when exiting the context
+    print('Device Closed!')
 ```
 
----
-
-### Record_Delay
-Configures recording delays for each channel.
-
-**Parameters**:
-- `delayArrayMicro`: List of delay values in microseconds for each channel.
-
-**Example:**
+### Advanced Configuration with Method Chaining
 ```python
-V.Record_Delay([5, 3.2, 1, 0, 0, 0, 8, 0.5])
+from VitesseAPI import initialiseVitesse
+
+with initialiseVitesse() as V:
+    # List available devices
+    devices = V.listDevices()
+    print(f"Available devices: {devices}")
+    
+    # Initialize and configure in a single chain
+    V.setSymbol(7, 2) \
+     .setChannelDrive([1, 1, 0, 0, 0, 0, 0, 0]) \
+     .setAverages(500) \
+     .setPrf(2000) \
+     .setRecordLength(100e-6) \
+     .setTriggerPhasing([0, 2.5, 0, 0, 0, 0, 0, 0]) \
+     .setRecordDelay([0, 5, 0, 0, 0, 0, 0, 0])
+    
+    # Validate configuration
+    V.checkValidity([0, 2.5, 0, 0, 0, 0, 0, 0], 
+                    [0, 5, 0, 0, 0, 0, 0, 0], 
+                    100e-6, 
+                    2000)
+    
+    # Acquire data
+    data = V.getArray()
+    print(f"Data shape: {data.shape}")
 ```
 
----
-
-### Get_Array
-Acquires the processed signal array from the device.
-
-**Returns**:
-- `echosig` (array): Normalised and processed signal array.
-
-**Example:**
+### Error Handling with Context Manager
 ```python
-ascan = V.Get_Array()
-```
-
----
-
-### Close_Device
-Closes the SPI connection with the device and clears the read buffer.
-
-**Example:**
-```python
-V.Close_Device()
-```
-
----
-
-## Example Usage
-```python
-from Vitesse_API import Vitesse
-
-## Device Initialisation
-
-V = Vitesse()       ## Instantiates Vitesse instance
-V.List_Devices()    ## Lists all available Sonobotics devices
-V.Initialise()      ## Initialises device enumerated first
-
-serial_number = '1'                  ## Serial number entry
-# V.Initialise_Ser_No(serial_number) ## Initialises device based on serial number
-
-## Signal Parameters
-
-numAverages = 100      ## Averages Range: 1 to 1000
-numChips = 7           ## Chips Range = 5 to 13 (5 chips = 5 MHz, 6 chips = 4.17 MHz, 7 chips = 3.57 MHz, 8 chips = 3.13 MHz, 
-                       ## 9 chips = 2.78 MHz, 10 chips = 2.5 MHz, 11 chips = 2.27 MHz, 12 chips = 2.08 MHz, 13 chips = 1.92 MHz)
-                       ## (Excitation Frequency = 1 / numChips * 2 * 20e-9)
-numCycles = 2          ## Cycles Range: 1 to 3
-recordLength = 25e-6   ## Record Length Range: 0 to 100 us (8 CH), 0 to 200 us (4 CH), 0 to 800 us (8 CH)
-PRF = 1000             ## PRF Range: 1 to 5000 Hz
-channelsOnArray = [1, 0, 0, 0, 0, 0, 0, 0] ## Channels on e.g. [Channel 1 (on/off), Channel 2(on/off), etc.]
-phaseArrayMicro = [0, 0, 0, 0, 0, 0, 0, 0] ## Phasing in microseconds for each channel e.g. [Channel 1 Phase (us), Channel 2 Phase (us), etc.]
-delayArrayMicro = [0, 0, 0, 0, 0, 0, 0, 0] ## Delay in microseconds for each channel e.g. [Channel 1 Delay (us), Channel 2 Delay (us), etc.]
-
-## Checking Validity of Signal Settings
-
-V.Check_Validity(phaseArrayMicro, delayArrayMicro, recordLength, PRF)
-
-## Settings Initialised on Vitesse
-
-V.Channel_Enable(channelsOnArray)
-V.Change_Symbol(numChips, numCycles)
-V.Change_Averages(numAverages)
-V.Change_PRF(PRF)
-V.Change_Record_Length(recordLength)
-V.Trigger_Phasing(phaseArrayMicro)
-V.Record_Delay(delayArrayMicro)
-print('Initialised Vitesse!\n')
-
-## Acquisition Loop
-
-count = 0
+from VitesseAPI import Vitesse
 
 try:
-    while True:
-        ## Acquiring Data
-        count += 1
-        array = V.Get_Array()
-        print('Signal (', count, '): ', array.flatten())
-except KeyboardInterrupt:
-    print('\nOperation Interrupted.')
-finally:
-    V.Close_Device()
-    print('\nDevice Closed!\n')
+    with Vitesse() as V:
+        V.initialise()
+        
+        # This configuration might raise an error
+        V.setConfig(
+            PRF=10000,  # High PRF
+            recordLength=200e-6,  # Long record
+            channelsOnDrive=[1,1,1,1,1,1,1,1]  # All channels
+        )
+        
+        data = V.getArray()
+        
+except ValueError as e:
+    print(f"Configuration error: {e}")
+except IOError as e:
+    print(f"Device error: {e}")
+# Device is guaranteed to be closed properly
 ```
-
----
-
-## Conclusion
-This API provides a robust and efficient interface for interacting with the SONUS Vitesse system. With a focus on configurability and high-speed data handling, it is an essential tool for advanced signal acquisition and processing tasks.
