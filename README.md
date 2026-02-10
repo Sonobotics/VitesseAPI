@@ -192,12 +192,6 @@ Configures all device parameters at once.
 - `Self`: Returns the instance for method chaining.
 
 **Parameters:**
-- `channelsOnArray`: List of 0s and 1s indicating which channels to enable
-- `numAverages` (1-1000): Number of averages for data acquisition
-- `PRF` (1-5000): Pulse Repetition Frequency in Hz
-- `recordLength`: Recording length in seconds
-- `phaseArrayMicro`: Phase delays in microseconds for each channel
-- `delayArrayMicro`: Record delays in microseconds for each channel
 - `numCycles` (1-3): Number of cycles per symbol
 - `channelsOnReceive`: List of 0s and 1s indicating which receiver channels to enable
 - `channelsOnDrive`: List of 0s and 1s indicating which driver channels to enable
