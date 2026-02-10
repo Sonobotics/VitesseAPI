@@ -277,7 +277,7 @@ Sets the number of averages for noise reduction.
 Sets the Pulse Repetition Frequency.
 
 **Parameters:**
-- `PRF` (1-20000): Frequency in Hz
+- `PRF` (1-5000): Frequency in Hz
 
 **Returns:**
 - `Self`: Returns the instance for method chaining.
@@ -343,6 +343,7 @@ with Vitesse().initialise() as V:
     # Configure for single channel, high-speed acquisition using method chaining
     V.setConfig(
         opFrequency=3.6e6,
+        numCycles=2,
         channelsOnDrive=[1,0,0,0,0,0,0,0],
         channelsOnReceive=[1,0,0,0,0,0,0,0],
         numAverages=100,
@@ -397,6 +398,7 @@ with Vitesse().initialise() as V:
     # Configure parameters with method chaining
     V.setConfig(
         opFrequency=3.6e6,
+        numCycles=2,
         channelsOnDrive=[1,0,0,0,0,0,0,0],
         channelsOnReceive=[1,0,0,0,0,0,0,0],
         numAverages=100,
@@ -441,6 +443,7 @@ with Vitesse().initialise(simulation=True) as V:
     # Configure parameters with method chaining
     V.setConfig(
         opFrequency=3.6e6,
+        numCycles=2,
         channelsOnDrive=[1,0,0,0,0,0,0,0],
         channelsOnReceive=[1,0,0,0,0,0,0,0],
         numAverages=100,
