@@ -42,8 +42,8 @@ class Vitesse:
         self.adcFrequency: int = DEFAULT_ADC_FREQ
         self.prf: int = 0
         self.recordLength: float = 0
-        self.phaseArrayMicro: list[int] = [0, 0, 0, 0, 0, 0, 0, 0]
-        self.delayArrayMicro: list[int] = [0, 0, 0, 0, 0, 0, 0, 0]
+        self.phaseArrayMicro: list[float] = [0, 0, 0, 0, 0, 0, 0, 0]
+        self.delayArrayMicro: list[float] = [0, 0, 0, 0, 0, 0, 0, 0]
         self.samplingMode: int = 24
         self.numAverages: int = 1
         self.maxChannels: int = 0
@@ -94,9 +94,9 @@ class Vitesse:
         self.externalTemp: float = 0.0
         self.e1: int = 0
         self.e2: int = 0
-        self.ex: int = 0
-        self.ey: int = 0
-        self.etheta: int = 0
+        self.ex: float = 0
+        self.ey: float = 0
+        self.etheta: float = 0
         self.encoderWheelbase: float = 0
         self.wheelRadius: float = 0
         self.encoderCpr: float = 0
@@ -218,13 +218,13 @@ class Vitesse:
 
         return devices
 
-    def checkValidity(self, phaseArrayMicro: Optional[list[int]] = None, delayArrayMicro: Optional[list[int]] = None, recordLength: Optional[float] = None, PRF: Optional[int] = None) -> Self:
+    def checkValidity(self, phaseArrayMicro: Optional[list[float]] = None, delayArrayMicro: Optional[list[float]] = None, recordLength: Optional[float] = None, PRF: Optional[int] = None) -> Self:
         """
         Checks validity of a set of Vitesse configuration parameters.
 
         Args:
-            phaseArrayMicro (list[int]): Phasing in microseconds for each channel e.g. [Channel 1 Phase (us), Channel 2 Phase (us), etc.]
-            delayArrayMicro (list[int]): Delay in microseconds for each channel e.g. [Channel 1 Delay (us), Channel 2 Delay (us), etc.]
+            phaseArrayMicro (list[float]): Phasing in microseconds for each channel e.g. [Channel 1 Phase (us), Channel 2 Phase (us), etc.]
+            delayArrayMicro (list[float]): Delay in microseconds for each channel e.g. [Channel 1 Delay (us), Channel 2 Delay (us), etc.]
             recordLength (float): Record Length Range
             PRF (int): PRF Range: 1 to 5000 Hz
 
@@ -295,14 +295,14 @@ class Vitesse:
                   PRF:                  int = 1000,
                   numAverages:          int = 100,
                   recordLength:         float = 50e-6,
-                  phaseArrayMicro:      list[int] = [0, 0, 0, 0, 0, 0, 0, 0],
-                  delayArrayMicro:      list[int] = [0, 0, 0, 0, 0, 0, 0, 0],
+                  phaseArrayMicro:      list[float] = [0, 0, 0, 0, 0, 0, 0, 0],
+                  delayArrayMicro:      list[float] = [0, 0, 0, 0, 0, 0, 0, 0],
                   peripheralsOnArray:   list[int] = [0, 0, 0, 0, 0, 0, 0, 0],
                   samplingMode:         int = 24,
                   pulseFrequency:       int = int(200e6),
                   opFrequency:          int = int(3.6e6),
-                  encoderWheelbase:     int = 40,
-                  wheelRadius:        float = 39.8/2,
+                  encoderWheelbase:     float = 40,
+                  wheelRadius:          float = 39.8/2,
                   encoderCpr:           int = 2048,
                   targetClock:          int = int(50e6)
                   ) -> Self:
@@ -924,12 +924,12 @@ class Vitesse:
         self._writeSpiDevice(record)
         return self
 
-    def setTriggerPhasing(self, phaseArrayMicro: list[int]) -> Self:
+    def setTriggerPhasing(self, phaseArrayMicro: list[float]) -> Self:
         """
         Sets the trigger phasing for each channel.
 
         Args:
-            phaseArrayMicro (list[int]): Phase delays in microseconds for each channel.
+            phaseArrayMicro (list[float]): Phase delays in microseconds for each channel.
 
         Returns:
             Self: Returns the instance for method chaining.
@@ -959,12 +959,12 @@ class Vitesse:
                 self._writeSpiDevice(phase)
         return self
 
-    def setRecordDelay(self, delayArrayMicro: list[int]) -> Self:
+    def setRecordDelay(self, delayArrayMicro: list[float]) -> Self:
         """
         Sets the record delay for each channel.
 
         Args:
-            delayArrayMicro (list[int]): Delay values in microseconds for each channel.
+            delayArrayMicro (list[float]): Delay values in microseconds for each channel.
 
         Returns:
             Self: Returns the instance for method chaining.

@@ -188,7 +188,7 @@ for serial, name, channels in devices:
     print(f"Device: {name}, Serial: {serial}, Channels: {channels}")
 ```
 
-#### `setConfig(numCycles: int = 2, channelsOnReceive: list[int] = [1,0,0,0,0,0,0,0], channelsOnDriver: list[int] = [1,0,0,0,0,0,0,0], PRF: int = 1000, numAverages: int = 100, recordLength: float = 200e-6, phaseArrayMicro: list[int] = [0,0,0,0,0,0,0,0], delayArrayMicro: list[int] = [0,0,0,0,0,0,0,0], peripheralsOnArray: list[int] = [0,0,0,0,0,0,0,0], samplingMode: int = 24, pulseFrequency: int = 200000000, opFrequency: int = 3600000, encoderWheelbase: int = 40, wheelRadius: float = 19, encoderCpr: int = 2048, targetClock: int = 50000000) -> Self`
+#### `setConfig(numCycles: int = 2, channelsOnReceive: list[int] = [1,0,0,0,0,0,0,0], channelsOnDriver: list[int] = [1,0,0,0,0,0,0,0], PRF: int = 1000, numAverages: int = 100, recordLength: float = 200e-6, phaseArrayMicro: list[float] = [0,0,0,0,0,0,0,0], delayArrayMicro: list[float] = [0,0,0,0,0,0,0,0], peripheralsOnArray: list[int] = [0,0,0,0,0,0,0,0], samplingMode: int = 24, pulseFrequency: int = 200000000, opFrequency: int = 3600000, encoderWheelbase: float = 40, wheelRadius: float = 19, encoderCpr: int = 2048, targetClock: int = 50000000) -> Self`
 Configures all device parameters at once. This is recommended over setting each parameter manually, since this ensures the correct precedence of the parameters.
 
 **Returns:**
@@ -201,8 +201,8 @@ Configures all device parameters at once. This is recommended over setting each 
 - `PRF` (1-5000): Pulse Repetition Frequency in Hz
 - `numAverages` (1-1000): Number of averages for data acquisition
 - `recordLength`: Recording length in seconds
-- `phaseArrayMicro`: Phase delays in microseconds for each channel
-- `delayArrayMicro`: Record delays in microseconds for each channel
+- `phaseArrayMicro`: Phase delays in microseconds for each channel, with a step size of 0.02 microseconds
+- `delayArrayMicro`: Record delays in microseconds for each channel, with a step size of 0.02 microseconds
 - `peripheralsOnArray`: List of 0s and 1s indicating which peripherals to enable
 - `samplingMode`: Length in bits of the sampling data (16 or 24)
 - `pulseFrequency`: Pulse frequency in Hz
@@ -212,7 +212,7 @@ Configures all device parameters at once. This is recommended over setting each 
 - `encoderCpr`: Encoder Counts Per Revolution
 - `targetClock`: Target FPGA clock frequency in Hz
 
-#### `checkValidity(phaseArrayMicro: list[int] | None = None, delayArrayMicro: list[int] | None = None, recordLength: float | None = None, PRF: int | None = None) -> Self`
+#### `checkValidity(phaseArrayMicro: list[float] | None = None, delayArrayMicro: list[float] | None = None, recordLength: float | None = None, PRF: int | None = None) -> Self`
 Validates the configuration parameters to ensure they don't violate timing constraints.
 
 If no value is given for a parameter, the current value stored in the instance will be used.
@@ -291,7 +291,7 @@ Sets the recording window length.
 **Returns:**
 - `Self`: Returns the instance for method chaining.
 
-#### `setTriggerPhasing(phaseArrayMicro: list[int]) -> Self`
+#### `setTriggerPhasing(phaseArrayMicro: list[float]) -> Self`
 Sets trigger phase delays for beam steering.
 
 **Parameters:**
@@ -300,7 +300,7 @@ Sets trigger phase delays for beam steering.
 **Returns:**
 - `Self`: Returns the instance for method chaining.
 
-#### `setRecordDelay(delayArrayMicro: list[int]) -> Self`
+#### `setRecordDelay(delayArrayMicro: list[float]) -> Self`
 Sets recording delays for each channel.
 
 **Parameters:**
@@ -470,7 +470,7 @@ with Vitesse().initialise(simulation=True) as V:
     print('Device Closed!')
 ```
 
-### Advanced Configuration with Method Chaining
+### Configuration with Method Chaining
 ```python
 from VitesseAPI import initialiseVitesse
 
@@ -484,7 +484,6 @@ with initialiseVitesse() as V:
      .setChannelDrive([1, 1, 0, 0, 0, 0, 0, 0]) \
      .setAverages(500) \
      .setPrf(2000) \
-     .setRecordLength(100e-6) \
      .setTriggerPhasing([0, 2.5, 0, 0, 0, 0, 0, 0]) \
      .setRecordDelay([0, 5, 0, 0, 0, 0, 0, 0])
     
