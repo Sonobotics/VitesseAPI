@@ -846,7 +846,9 @@ class Vitesse:
         :return: The ADC sampling frequency.
         :rtype: int
         """
-        if self.simulation:
+        # This function is not available on older binaries.
+        # However, for all old binaries, we are using 50 MHz, so we are directly returning the value here.
+        if self.simulation or self.version < 3000:
             return DEFAULT_ADC_FREQ
         if self.spiDevice is None:
             raise IOError(
