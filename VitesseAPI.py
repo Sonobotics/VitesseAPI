@@ -1,7 +1,7 @@
 # API Compatible with binary version 26.1.2 and below
 from __future__ import annotations
 from types import FunctionType
-from .utils import float16_to_decimal, float24_to_decimal, int_temp, ext_temp, dec_enc, dec_enc_float, empty, decode_version_new
+from .utils import int_temp, ext_temp, dec_enc, dec_enc_float, empty, decode_version_new
 from . import sonoboticsFTDI as sbftdi
 import time
 import numpy as np
@@ -88,7 +88,7 @@ class Vitesse:
         # This is used to store the array format of the version. Element 0 is always the major build and is used for feature updates.
         self.version_array: list[int] = []
         # The API version is compatible with FPGA binaries up to this.
-        self.APIVersion: list[int] = [26, 1, 2]
+        self.APIVersion: list[int] = [26, 2, 4]
 
         self.internalTemp: float = 0.0
         self.externalTemp: float = 0.0
@@ -654,7 +654,6 @@ class Vitesse:
             return self
 
         self.clearCounterEnable([0, 0, 0, 0, 0, 0, 0, 0])
-        time.sleep(1)
         self.clearCounterEnable([1, 0, 0, 0, 0, 0, 0, 0])
         return self
 
@@ -1168,20 +1167,12 @@ class Vitesse:
         indicesToDelete = np.arange(-1 * (self.additionalBytes + 1), -1)
         array = np.delete(array, indicesToDelete)
 
-        # -------------------------
-        # Convert to binary string
-        # -------------------------
-        arr_uint8 = array.astype(np.uint8)
-
-        def _to_binary(x: int) -> str:
-            return format(x, '08b')
-        binary_strings = np.vectorize(_to_binary)(arr_uint8)
-
-        channel = np.split(binary_strings, self.numChannelsOnReceive)
+        array = np.array(array, dtype=np.float16)
+        channel = np.split(array, self.numChannelsOnReceive)
         channel = [ch[1:-1] for ch in channel]  # Trim first and last markers
 
-        byteArray = np.empty(
-            (self.numChannelsOnReceive, self.recordPoints, self.messageBytes), dtype='<U8')
+        rawBytesArray = np.empty(
+            (self.numChannelsOnReceive, self.recordPoints, self.messageBytes), dtype=float)
         reshapeArray = np.empty(
             (self.numChannelsOnReceive, self.recordPoints), dtype=float)
         normArray = np.empty(
@@ -1189,23 +1180,20 @@ class Vitesse:
         echoSignal = np.empty(
             (self.numChannelsOnReceive, self.recordPoints), dtype=float)
 
+        if self.maxChannels <= 4:
+            inversionArray = [0, 3]
+        else:
+            inversionArray = [0, 1, 6, 7]
+
         for i in range(self.numChannelsOnReceive):
-            byteArray[i] = np.reshape(channel[i], (-1, self.messageBytes))
-            temp: list[float] = []
-            for row in byteArray[i]:
-                joined = ''.join(row.tolist())
-                if self.messageBytes == 2:
-                    temp.append(float16_to_decimal(joined))
-                elif self.messageBytes == 3:
-                    temp.append(float24_to_decimal(joined))
-            reshapeArray[i] = np.array(temp)
+            rawBytesArray[i] = np.reshape(channel[i], (-1, self.messageBytes))
+            if self.messageBytes == 3:
+                reshapeArray[i] = rawBytesArray[i][:, 2] + rawBytesArray[i][:,
+                                                                            1] * (2**8) + rawBytesArray[i][:, 0] * (2**16)
+            elif self.messageBytes == 2:
+                reshapeArray[i] = rawBytesArray[i][:, 1] * \
+                    (2**8) + rawBytesArray[i][:, 0] * (2**16)
             normArray[i] = np.divide(reshapeArray[i], self.numAverages)
-
-            if self.maxChannels <= 4:
-                inversionArray = [0, 3]
-            else:
-                inversionArray = [0, 1, 6, 7]
-
             # Conditional inversion for specific channel IDs
             if self.enabledChannelReceive[i] in inversionArray:
                 echoSignal[i] = np.subtract(normArray[i], 2048) * -1
