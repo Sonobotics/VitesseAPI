@@ -1098,6 +1098,7 @@ class Vitesse:
                     np.random.normal(0.0, noise_std, clean.shape)
 
             echoSignal = accumulator / self.numAverages
+            echoSignal = np.tile(echoSignal, (self.numChannelsOnReceive, 1))
             self.messageArray = []
             return echoSignal
 
