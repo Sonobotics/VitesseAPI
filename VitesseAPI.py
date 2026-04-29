@@ -1151,7 +1151,7 @@ class Vitesse:
                 if (self.sensorArray[i] == "External Temperature"):
                     self.externalTemp = result
                 if (self.sensorArray[i] == "Encoder 1"):
-                    self.encoder1 = result
+                    self.e1 = result
                 if (self.sensorArray[i] == "Encoder 2"):
                     self.e2 = result
                 if (self.sensorArray[i] == "Encoder Cart X"):
