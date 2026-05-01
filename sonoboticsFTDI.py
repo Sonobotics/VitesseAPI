@@ -295,7 +295,10 @@ class sonoboticsFtdiChannel(ftdiChannel):
             if return_code != 0:
                 error_msg = STATUS_MESSAGES.get(
                     return_code, f"Unknown status code: {return_code}")
-                raise Exception(f"Can't write to device ({error_msg})")
+                if return_code == 4:
+                    print('Error writing to device:', error_msg)
+                else:
+                    raise Exception(f"Can't write to device ({error_msg})")
 
     # reads data from device and returns as a byte array
 

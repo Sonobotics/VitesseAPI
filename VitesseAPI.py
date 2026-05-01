@@ -337,6 +337,29 @@ class Vitesse:
             .setEncoderRadiusCpr(wheelRadius, encoderCpr) \
             .configureAttributes()
 
+    def refreshConfig(self) -> Self:
+        """
+        Reconfigures the Vitesse device with pre-specified parameters.
+
+        """
+        self.setConfig(numCycles=self.numCycles,
+                       channelsOnReceive=self.ChannelsOnReceive,
+                       channelsOnDrive=self.ChannelsOnDrive,
+                       PRF=self.prf,
+                       numAverages=self.numAverages,
+                       recordLength=self.recordLength,
+                       phaseArrayMicro=self.phaseArrayMicro,
+                       delayArrayMicro=self.delayArrayMicro,
+                       peripheralsOnArray=self.peripheralsOnArray,
+                       samplingMode=self.samplingMode,
+                       pulseFrequency=self.pulseFrequency,
+                       opFrequency=self.opFrequency,
+                       encoderWheelbase=self.encoderWheelbase,
+                       wheelRadius=self.wheelRadius,
+                       encoderCpr=self.encoderCpr,
+                       targetClock=self.adcFrequency
+                       )
+
     def setNumChips(self, pulseFrequency: int, opFrequency: int) -> Self:
         """
         Sets the Pulse Frequency, Operation Frequency and the number of chips calculated from the two values.
@@ -376,6 +399,7 @@ class Vitesse:
         elif numCycles > 3 or numCycles < 1:
             raise ValueError('Number of cycles out of range.')
         else:
+            self.numCycles = numCycles
             symbol: list[Union[str, int]] = [
                 '1', numChips, numCycles, 'p', 'a']
             self._writeSpiDevice(symbol)
@@ -411,6 +435,7 @@ class Vitesse:
         else:
             channel: list[Union[str, int]] = ['2', channelByte, 'a', 'a', 'a']
             self._writeSpiDevice(channel)
+            self.ChannelsOnReceive = channelsOnReceive
             return self
 
     def setChannelDrive(self, channelsOnDrive: list[int]) -> Self:
@@ -451,6 +476,7 @@ class Vitesse:
         channel: list[Union[str, int]] = [
             'd', channelByte, 'a', 'a', 'a']
         self._writeSpiDevice(channel)
+        self.ChannelsOnDrive = channelsOnDrive
 
         return self
 
@@ -484,6 +510,7 @@ class Vitesse:
         else:
             channel: list[Union[str, int]] = ['e', channelByte, 'a', 'a', 'a']
             self._writeSpiDevice(channel)
+            self.powerManagementArray = powerManagementArray
 
         return self
 
@@ -542,7 +569,7 @@ class Vitesse:
         # backward compatible with older firmware
         if (self.version < 1000):
             return self
-        
+
         self.samplingMode = samplingMode
 
         if self.samplingMode == 16:
@@ -588,6 +615,7 @@ class Vitesse:
             clearCounter: list[Union[str, int]] = [
                 'x', clearCounterByte, 'a', 'a', 'a']
             self._writeSpiDevice(clearCounter)
+            self.clearCountersOnArray = clearCountersOnArray
         return self
 
     def setClockControlEnable(self, targetClock: int) -> Self:
@@ -713,7 +741,6 @@ class Vitesse:
             self.prf = PRF
             return self
 
-
     def setEncoderWheelbase(self, wheelbase: float) -> Self:
         '''
         Sets the encoder wheelbase.
@@ -793,7 +820,6 @@ class Vitesse:
         """
         if self.simulation:
             return 23
-
 
         if self.spiDevice is None:
             raise IOError(
@@ -1116,10 +1142,16 @@ class Vitesse:
         time.sleep(self.numAverages / self.prf)
 
         byteBack = 0
+        byteArray = []
         while byteBack != 100:
             Byte = self.spiDevice.read(1)
             time.sleep(self.READ_DELAY)
             byteBack = np.frombuffer(Byte, dtype=np.uint8)
+            byteArray.append(byteBack)
+            if byteArray[-3:] == [0, 0, 0] or byteArray[-3:] == [200, 200, 200]:
+                print('Error in acquisition: Invalid response received')
+                self.refreshConfig()
+                byteBack = 100
 
         # -------------------------
         # Read all bytes in chunks if necessary
@@ -1308,7 +1340,7 @@ class Vitesse:
         """
         if not self.isSHM:
             return self
-        
+
         if sleepTime > 20000:
             raise ValueError('Maximum sleep time of 20000 exceeded.')
         elif sleepTime < 0:
