@@ -1,4 +1,4 @@
-# API Compatible with binary version 26.1.2 and below
+# API Compatible with binary version 26.2.4 and below
 from __future__ import annotations
 from types import FunctionType
 from .utils import int_temp, ext_temp, dec_enc, dec_enc_float, empty, decode_version_new
