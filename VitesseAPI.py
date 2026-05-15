@@ -680,7 +680,12 @@ class Vitesse:
         # backward compatible with older firmware
         if (self.version < 1000):
             return self
-
+        
+        # numClearCountersOn is capped at 5 per call.
+        # Clear Cart X/Y/Theta accumulator.
+        self.clearCounterEnable([0, 0, 0, 0, 0, 0, 0, 0])
+        self.clearCounterEnable([0, 0, 0, 0, 1, 1, 1, 0])
+        # Clear encoder 1 and 2.
         self.clearCounterEnable([0, 0, 0, 0, 0, 0, 0, 0])
         self.clearCounterEnable([1, 0, 0, 0, 0, 0, 0, 0])
         return self
