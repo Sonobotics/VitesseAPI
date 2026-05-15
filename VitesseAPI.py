@@ -792,7 +792,8 @@ class Vitesse:
                 radius_float32 = np.float32(radius)
                 CPR_float32 = np.float32(CPR)
 
-                const_to_send = 2*np.pi*radius_float32/CPR_float32
+                const_to_send = np.float32(
+                    2.0 * np.pi * float(radius_float32) / float(CPR_float32))
                 const_symbol = list(const_to_send.tobytes())
 
                 pulse: list[Union[str, int]] = ['i', const_symbol[0],
