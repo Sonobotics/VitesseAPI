@@ -1,3 +1,4 @@
+# pyright: reportUnknownVariableType=false
 # API Compatible with binary version 26.9.0 and below
 from __future__ import annotations
 from types import FunctionType
@@ -7,9 +8,9 @@ import time
 import numpy as np
 import sys
 if sys.version_info >= (3, 11):
-    from typing import Self, Optional, Union
+    from typing import Self, Optional, Union, Sequence
 else:
-    from typing_extensions import Self, Optional, Union
+    from typing_extensions import Self, Optional, Union, Sequence
 from contextlib import contextmanager
 from pathlib import Path
 
@@ -85,14 +86,14 @@ class Vitesse:
         self.apiVersion: list[int] = [26, 9, 0]
 
         # Peripheral data variables
-        self.internalTemp: float = 0.0
-        self.externalTemp: float = 0.0
-        self.encoderIndex1: int = 0
-        self.encoderIndex2: int = 0
-        self.encoderIndex3: int = 0
-        self.positionX: float = 0
-        self.positionY: float = 0
-        self.positionTheta: float = 0
+        self.internalTemp: Optional[float] = 0.0
+        self.externalTemp: Optional[float] = 0.0
+        self.encoderIndex1: Optional[int] = 0
+        self.encoderIndex2: Optional[int] = 0
+        self.encoderIndex3: Optional[int] = 0
+        self.positionX: Optional[float] = 0
+        self.positionY: Optional[float] = 0
+        self.positionTheta: Optional[float] = 0
 
         # Peripheral decoding arrays
         self.peripheralDescriptionArray: list[str] = ["Internal Temperature", "External Temperature",
@@ -113,7 +114,7 @@ class Vitesse:
         self.wheelbase2: float = 0
 
         # Additional variables
-        self.SHM: bool = False
+        self.shm: bool = False
 
     def __enter__(self):
         return self
@@ -374,7 +375,7 @@ class Vitesse:
             Self: Returns the instance for method chaining.
         """
         if self.version < 6784:
-            self.excitationClockFrequency = 50e6
+            self.excitationClockFrequency = int(50e6)
         else:
             self.excitationClockFrequency = excitationClockFrequency
         self.excitationFrequency = excitationFrequency
@@ -455,8 +456,8 @@ class Vitesse:
         """
 
         if self.version < 6784:
-            self.numChannelsOnDrive = range(0, self.maxChannels)
-            self.enabledChannelDrive = range(0, self.maxChannels)
+            self.numChannelsOnDrive = self.maxChannels
+            self.enabledChannelDrive = list(range(0, self.maxChannels))
             return self
 
         channelsOnDrive = [1 if ch != 0 else 0 for ch in channelsOnDrive]
@@ -473,7 +474,7 @@ class Vitesse:
         self._writeSpiDevice(channel)
         return self
 
-    def setDutyCycles(self, dutyCycle1: float, dutyCycle2: float, channelDutyCycles: list[float], numChips: int) -> Self:
+    def setDutyCycles(self, dutyCycle1: float, dutyCycle2: float, channelDutyCycles: Sequence[Union[int, float]], numChips: int) -> Self:
         """
         Configure two duty-cycle profiles and select a profile for each channel.
 
@@ -564,11 +565,8 @@ class Vitesse:
         Returns:
             Self: The current instance for method chaining.
         """
-        if not self.SHM:
+        if not self.shm:
             return self
-
-        if not isinstance(powerControl, bool):
-            raise TypeError("powerControl must be True or False")
 
         powerByte = int(powerControl)
 
@@ -1327,7 +1325,7 @@ class Vitesse:
         :return: Returns the instance for method chaining.
         :rtype: Self
         """
-        if not self.SHM:
+        if not self.shm:
             return self
 
         if sleepTime > 20000:
@@ -1375,10 +1373,10 @@ class Vitesse:
                 if not b:
                     raise TimeoutError("check_shm: timeout after status byte.")
                 val = b[0]
-            self.SHM = True
+            self.shm = True
         except:
             val = 0
-            self.SHM = False
+            self.shm = False
         return val
 
     def closeDevice(self) -> None:

@@ -2,13 +2,13 @@ from __future__ import annotations
 import numpy as np
 import math
 import struct
-from typing import TYPE_CHECKING
+from typing import Any, TYPE_CHECKING
 
 if TYPE_CHECKING:
     from VitesseAPI import Vitesse
 
 
-def ext_temp(np_list: np.ndarray) -> float:
+def ext_temp(np_list: np.ndarray[Any, np.dtype[np.integer[Any]]]) -> float:
     """
     Convert two-byte RTD data into degrees Celsius.
 
@@ -63,7 +63,7 @@ def ext_temp(np_list: np.ndarray) -> float:
     return temp
 
 
-def int_temp(np_list: np.ndarray) -> float:
+def int_temp(np_list: np.ndarray[Any, np.dtype[np.uint8]]) -> float:
     """
     Convert the FPGA/XADC internal temperature register to degrees Celsius.
 
@@ -99,7 +99,7 @@ def int_temp(np_list: np.ndarray) -> float:
     return temperature_c
 
 
-def dec_enc(bytes_array: np.ndarray) -> int:
+def dec_enc(bytes_array: np.ndarray[Any, np.dtype[np.uint8]]) -> int:
     """
     Decode a signed 32-bit encoder count from four MSB-first bytes.
 
@@ -122,11 +122,15 @@ def dec_enc(bytes_array: np.ndarray) -> int:
         raise ValueError("Expected exactly 4 bytes.")
 
     # Decode the bytes as a signed, big-endian integer.
-    count = int.from_bytes(bytes_array, byteorder='big', signed=True)
+    count = int.from_bytes(
+        bytes(int(value) for value in bytes_array),
+        byteorder='big',
+        signed=True,
+    )
     return count
 
 
-def dec_enc_float(bytes_array: np.ndarray) -> float:
+def dec_enc_float(bytes_array: np.ndarray[Any, np.dtype[np.uint8]]) -> float:
     """
     Decode a 32-bit IEEE-754 floating-point value from four MSB-first bytes.
 
@@ -149,7 +153,11 @@ def dec_enc_float(bytes_array: np.ndarray) -> float:
         raise ValueError("Expected exactly 4 bytes.")
 
     # Decode the bytes as an unsigned, big-endian bit pattern.
-    count = int.from_bytes(bytes_array, byteorder='big', signed=False)
+    count = int.from_bytes(
+        bytes(int(value) for value in bytes_array),
+        byteorder='big',
+        signed=False,
+    )
     # Interpret the bit pattern as an IEEE-754 single-precision float.
     return struct.unpack('>f', struct.pack('>I', count))[0]
 
