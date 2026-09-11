@@ -1,7 +1,7 @@
-# API Compatible with binary version 26.2.4 and below
+# API Compatible with binary version 26.9.0 and below
 from __future__ import annotations
 from types import FunctionType
-from .utils import int_temp, ext_temp, dec_enc, dec_enc_float, empty, decode_version_new
+from .utils import bin24_to_int, bin16_to_int, int_temp, ext_temp, dec_enc, dec_enc_float, decode_version
 from . import sonoboticsFTDI as sbftdi
 import time
 import numpy as np
@@ -13,8 +13,7 @@ else:
 from contextlib import contextmanager
 from pathlib import Path
 
-# Global constants factored out for simplicity
-# Do not ever change them in runtime, these are constants!
+# Global constants
 DEFAULT_ADC_FREQ = int(50e6)
 VALID_TARGET_CLOCK = [int(50e6), int(25e6)]
 
@@ -35,79 +34,91 @@ class Vitesse:
     """
 
     def __init__(self):
+        """
+        Initializes the Vitesse object with default values.
+        """
+        # SPI device object
+        self.spiDevice: Optional[sbftdi.ftdiChannel] = None
+
+        # Message transfer variables
         self.READ_DELAY: float = 500e-6
-        self.messageBytes: int = 3
+        self.MAX_READ_CHUNK = 64000
         self.THRESHOLD_LEVEL: int = 0
         self.TRIGGER: int = 0
+
+        # Vitesse configuration parameters
         self.adcFrequency: int = DEFAULT_ADC_FREQ
         self.prf: int = 0
         self.recordLength: float = 0
         self.phaseArrayMicro: list[float] = [0, 0, 0, 0, 0, 0, 0, 0]
         self.delayArrayMicro: list[float] = [0, 0, 0, 0, 0, 0, 0, 0]
         self.samplingMode: int = 24
-        self.numAverages: int = 1
+        self.numAverages: int = 100
         self.maxChannels: int = 0
-        self.spiDevice: Optional[sbftdi.ftdiChannel] = None
-
-        # Dedicated to handling the receiving channels
-        self.numChannelsOnReceive: int = 0  # Number of channels enabled
-        # The 1/0 to actually enable/disable the channel
+        self.excitationClockFrequency: int = int(200e6)
+        self.excitationFrequency: int = int(3.6e6)
+        self.numChips: int = 0
+        self.numChannelsOnReceive: int = 0
         self.ChannelsOnReceive: list[int] = [0, 0, 0, 0, 0, 0, 0, 0]
         self.enabledChannelReceive: list[int] = [
-            0, 0, 0, 0, 0, 0, 0, 0]  # The array of the enabled channels
-
-        # Dedicated to handling the driving channels
+            0, 0, 0, 0, 0, 0, 0, 0]
         self.numChannelsOnDrive: int = 0
         self.ChannelsOnDrive:  list[int] = [0, 0, 0, 0, 0, 0, 0, 0]
         self.enabledChannelDrive: list[int] = [0, 0, 0, 0, 0, 0, 0, 0]
-
-        self.numPeripheralsOnArray: list[int] = [0, 0, 0, 0, 0, 0, 0, 0]
-
         self.recordPoints: int = 0
-        self.MAX_READ_CHUNK = 64000
-        self.sensorArray: list[str] = ["Internal Temperature", "External Temperature",
-                                       "Encoder 1", "Encoder 2", "Encoder Cart X", "Encoder Cart Y", "Encoder Cart Theta", "NA"]
-        self.peripheralsOnArray: list[int] = [0, 0, 0, 0, 0, 0, 0, 0]
-        # How many bytes each peripheral should be
-        self.bytesArray: list[int] = [2, 2, 4, 4, 4, 4, 4, 0]
-        self.functionArray: list[FunctionType] = [int_temp, ext_temp, dec_enc, dec_enc,
-                                                  dec_enc_float, dec_enc_float, dec_enc_float, empty]
+        self.numChannelsFromFPGA: int = 0
+        self.polarity: str = 'p'
+        self.dutyCycle1: float = 1.0
+        self.dutyCycle2: float = 0.0
+        self.simulation: bool = False
+
+        # FPGA message decoding variables
         self.additionalBytes: int = 0
         self.totalDataBytes: int = 0
         self.totalBytes: int = 0
         self.messageArray: list[int] = []
-        self.clockArray: list[int] = []
-        self.simulation: bool = False
+        self.messageBytes: int = 3
 
-        self.pulseFrequency: int = int(200e6)
-        self.opFrequency: int = int(3.6e6)
-        self.numChips: int = 0
-
-        # This is used to access the numeric value that comes back from the FPGA.
+        # Version information
         self.version: int = 0
-        # This is used to store the array format of the version. Element 0 is always the major build and is used for feature updates.
-        self.version_array: list[int] = []
-        # The API version is compatible with FPGA binaries up to this.
-        self.APIVersion: list[int] = [26, 2, 4]
+        self.versionArray: list[int] = []
+        self.apiVersion: list[int] = [26, 9, 0]
 
+        # Peripheral data variables
         self.internalTemp: float = 0.0
         self.externalTemp: float = 0.0
-        self.e1: int = 0
-        self.e2: int = 0
-        self.ex: float = 0
-        self.ey: float = 0
-        self.etheta: float = 0
-        self.encoderWheelbase: float = 0
+        self.encoderIndex1: int = 0
+        self.encoderIndex2: int = 0
+        self.encoderIndex3: int = 0
+        self.positionX: float = 0
+        self.positionY: float = 0
+        self.positionTheta: float = 0
+
+        # Peripheral decoding arrays
+        self.peripheralDescriptionArray: list[str] = ["Internal Temperature", "External Temperature",
+                                                      "Encoder 1", "Encoder 2", "Encoder Cart X", "Encoder Cart Y", "Encoder Cart Theta", "Encoder 3"]
+        self.peripheralDecodeArray: list[FunctionType] = [int_temp, ext_temp, dec_enc, dec_enc,
+                                                          dec_enc_float, dec_enc_float, dec_enc_float, dec_enc]
+        self.peripheralBytesArray: list[int] = [2, 2, 4, 4, 4, 4, 4, 4]
+
+        # Encoder parameter variables
+        self.wheelbase: float = 0
         self.wheelRadius: float = 0
         self.encoderCpr: float = 0
+        self.encoderCpr1: float = 0
+        self.encoderCpr2: float = 0
+        self.wheelRadius1: float = 0
+        self.wheelRadius2: float = 0
+        self.wheelbase1: float = 0
+        self.wheelbase2: float = 0
 
-        self.isSHM: bool = False
+        # Additional variables
+        self.SHM: bool = False
 
     def __enter__(self):
         return self
 
     def __exit__(self, _type, _value, _traceback):  # type: ignore
-        # Context manager implementation for closing the device elegantly
         if self.spiDevice is not None:
             self.closeDevice()
 
@@ -134,7 +145,7 @@ class Vitesse:
             self.maxChannels = 8
             self.setAdcThreshold()
             self.version = 23
-            self.version_array = [23, 1, 0]
+            self.versionArray = [23, 1, 0]
             self.adcFrequency = DEFAULT_ADC_FREQ
             return self
 
@@ -161,7 +172,7 @@ class Vitesse:
             initialarray = np.frombuffer(
                 self.spiDevice.read(1000), dtype=np.uint8)
 
-        self.maxChannels = devices[0][2]  # Channel information for listDevices
+        self.maxChannels = devices[0][2]
         self.setAdcThreshold()
 
         try:
@@ -170,7 +181,7 @@ class Vitesse:
             # Handle for legacy FPGA binaries
             self.version = 256
 
-        self.version_array = decode_version_new(self.version)
+        self.versionArray = decode_version(self.version)
 
         try:
             self.adcFrequency = self.getFrequency()
@@ -297,14 +308,22 @@ class Vitesse:
                   recordLength:         float = 50e-6,
                   phaseArrayMicro:      list[float] = [0, 0, 0, 0, 0, 0, 0, 0],
                   delayArrayMicro:      list[float] = [0, 0, 0, 0, 0, 0, 0, 0],
-                  peripheralsOnArray:   list[int] = [0, 0, 0, 0, 0, 0, 0, 0],
                   samplingMode:         int = 24,
-                  pulseFrequency:       int = int(200e6),
-                  opFrequency:          int = int(3.6e6),
-                  encoderWheelbase:     float = 40,
+                  excitationClockFrequency:       int = int(200e6),
+                  excitationFrequency:          int = int(3.6e6),
+                  targetClock:          int = int(50e6),
+                  polarity:             str = 'p',
+                  dutyCycle1: float = 1.0,
+                  dutyCycle2: float = 0.0,
                   wheelRadius:          float = 39.8/2,
+                  wheelRadius1: Optional[float] = None,
+                  wheelRadius2: Optional[float] = None,
                   encoderCpr:           int = 2048,
-                  targetClock:          int = int(50e6)
+                  encoderCpr1: Optional[float] = None,
+                  encoderCpr2: Optional[float] = None,
+                  wheelbase:     float = 40,
+                  wheelbase1: Optional[float] = None,
+                  wheelbase2: Optional[float] = None
                   ) -> Self:
         """
         Configures the Vitesse device with the specified parameters.
@@ -315,71 +334,55 @@ class Vitesse:
             Self: Returns the instance for method chaining.
         """
 
-        self.setNumChips(pulseFrequency, opFrequency)
+        self.setNumChips(excitationClockFrequency, excitationFrequency)
 
         self.samplingMode = samplingMode
-        self.peripheralsOnArray = peripheralsOnArray
 
-        return self.clearEncoders() \
-            .checkValidity(phaseArrayMicro, delayArrayMicro, recordLength, PRF) \
-            .setSymbol(self.numChips, numCycles) \
+        # Set encoder parameters, using provided values or defaults if not provided
+        wheelRadius1 = wheelRadius if wheelRadius1 is None else wheelRadius1
+        wheelRadius2 = wheelRadius if wheelRadius2 is None else wheelRadius2
+        encoderCpr1 = encoderCpr if encoderCpr1 is None else encoderCpr1
+        encoderCpr2 = encoderCpr if encoderCpr2 is None else encoderCpr2
+        wheelbase1 = wheelbase / 2 if wheelbase1 is None else wheelbase1
+        wheelbase2 = wheelbase / 2 if wheelbase2 is None else wheelbase2
+
+        return self.checkValidity(phaseArrayMicro, delayArrayMicro, recordLength, PRF) \
+            .setSymbol(self.numChips, numCycles, polarity) \
+            .setDutyCycles(dutyCycle1, dutyCycle2, channelsOnDrive, self.numChips) \
             .setChannelReceive(channelsOnReceive) \
             .setChannelDrive(channelsOnDrive) \
+            .setEncoderParameters(wheelRadius1, wheelRadius2, encoderCpr1, encoderCpr2, wheelbase1, wheelbase2, wheelbase, wheelRadius, encoderCpr) \
+            .clearEncoders() \
             .setSamplingMode(samplingMode) \
-            .setPeripheralEnable(peripheralsOnArray) \
             .setClockControlEnable(targetClock) \
             .setAverages(numAverages) \
             .setPrf(PRF) \
             .setRecordLength(recordLength) \
             .setTriggerPhasing(phaseArrayMicro) \
             .setRecordDelay(delayArrayMicro) \
-            .setEncoderWheelbase(encoderWheelbase) \
-            .setEncoderRadiusCpr(wheelRadius, encoderCpr) \
             .configureAttributes()
 
-    def refreshConfig(self) -> Self:
+    def setNumChips(self, excitationClockFrequency: int, excitationFrequency: int) -> Self:
         """
-        Reconfigures the Vitesse device with pre-specified parameters.
-
-        """
-        self.setConfig(numCycles=self.numCycles,
-                       channelsOnReceive=self.ChannelsOnReceive,
-                       channelsOnDrive=self.ChannelsOnDrive,
-                       PRF=self.prf,
-                       numAverages=self.numAverages,
-                       recordLength=self.recordLength,
-                       phaseArrayMicro=self.phaseArrayMicro,
-                       delayArrayMicro=self.delayArrayMicro,
-                       peripheralsOnArray=self.peripheralsOnArray,
-                       samplingMode=self.samplingMode,
-                       pulseFrequency=self.pulseFrequency,
-                       opFrequency=self.opFrequency,
-                       encoderWheelbase=self.encoderWheelbase,
-                       wheelRadius=self.wheelRadius,
-                       encoderCpr=self.encoderCpr,
-                       targetClock=self.adcFrequency
-                       )
-
-    def setNumChips(self, pulseFrequency: int, opFrequency: int) -> Self:
-        """
-        Sets the Pulse Frequency, Operation Frequency and the number of chips calculated from the two values.
+        Sets the excitation clock frequency, excitation frequency and the number of chips calculated from the two values.
 
         Args:
-            pulseFrequency (int)
-            opFrequency (int)
+            excitationClockFrequency (int)
+            excitationFrequency (int)
 
         Returns:
             Self: Returns the instance for method chaining.
         """
-        if self.version < 3000:
-            self.pulseFrequency = 50000000
+        if self.version < 6784:
+            self.excitationClockFrequency = 50e6
         else:
-            self.pulseFrequency = pulseFrequency
-        self.opFrequency = opFrequency
-        self.numChips = int(round((self.pulseFrequency / 2) / opFrequency))
+            self.excitationClockFrequency = excitationClockFrequency
+        self.excitationFrequency = excitationFrequency
+        self.numChips = int(
+            round((self.excitationClockFrequency / 2) / excitationFrequency))
         return self
 
-    def setSymbol(self, numChips: int, numCycles: int) -> Self:
+    def setSymbol(self, numChips: int, numCycles: int, polarity: str) -> Self:
         """
         Sets the symbol configuration for the Vitesse device.
 
@@ -399,9 +402,8 @@ class Vitesse:
         elif numCycles > 3 or numCycles < 1:
             raise ValueError('Number of cycles out of range.')
         else:
-            self.numCycles = numCycles
             symbol: list[Union[str, int]] = [
-                '1', numChips, numCycles, 'p', 'a']
+                '1', numChips, numCycles, polarity, 'a']
             self._writeSpiDevice(symbol)
             return self
 
@@ -435,7 +437,6 @@ class Vitesse:
         else:
             channel: list[Union[str, int]] = ['2', channelByte, 'a', 'a', 'a']
             self._writeSpiDevice(channel)
-            self.ChannelsOnReceive = channelsOnReceive
             return self
 
     def setChannelDrive(self, channelsOnDrive: list[int]) -> Self:
@@ -451,103 +452,130 @@ class Vitesse:
         Raises:
             ValueError: If maximum number of channels is exceeded.
             RuntimeError: If device operation fails.
-        IMPORTANT NOTE:
-            -> If the firmware version is less than 5, it will not have the logic to interpret and understand
-            this additional command.
-            -> This check is here, so that if the version is detected as being version 5 major or newer, it will run,
-            otherwise it will be skipped.
         """
 
-        if self.version < 3000 or int(self.version_array[0]) < 5:
+        if self.version < 6784:
+            self.numChannelsOnDrive = range(0, self.maxChannels)
+            self.enabledChannelDrive = range(0, self.maxChannels)
             return self
 
+        channelsOnDrive = [1 if ch != 0 else 0 for ch in channelsOnDrive]
         reversedchannelsOnDrive = channelsOnDrive[::-1]
         channelsOn = ''.join(map(str, reversedchannelsOnDrive))
         channelByte = int(channelsOn[-8:], 2)
-
         self.numChannelsOnDrive = int(
             np.count_nonzero(reversedchannelsOnDrive))
         self.enabledChannelDrive = [
             index for index, value in enumerate(channelsOnDrive) if value == 1]
-
         if self.numChannelsOnDrive > 8:
             raise ValueError('Maximum number of channels exceeded!\n')
-
-        channel: list[Union[str, int]] = [
-            'd', channelByte, 'a', 'a', 'a']
+        channel: list[Union[str, int]] = ['d', channelByte, 'a', 'a', 'a']
         self._writeSpiDevice(channel)
-        self.ChannelsOnDrive = channelsOnDrive
+        return self
+
+    def setDutyCycles(self, dutyCycle1: float, dutyCycle2: float, channelDutyCycles: list[float], numChips: int) -> Self:
+        """
+        Configure two duty-cycle profiles and select a profile for each channel.
+
+        Args:
+            dutyCycle1: Profile 1 power setting, from 0.0 to 1.0.
+            dutyCycle2: Profile 2 power setting, from 0.0 to 1.0.
+            channelDutyCycles: Eight channel values. Each non-zero value must
+                match dutyCycle1 or dutyCycle2.
+            numChips: Number of chips per excitation cycle.
+        """
+        if self.version < 6784:
+            return self
+
+        if not 0.0 <= dutyCycle1 <= 1.0:
+            raise ValueError("dutyCycle1 must be between 0 and 1.")
+
+        if not 0.0 <= dutyCycle2 <= 1.0:
+            raise ValueError("dutyCycle2 must be between 0 and 1.")
+
+        if not 1 <= numChips <= 100:
+            raise ValueError("numChips must be between 1 and 100.")
+
+        if len(channelDutyCycles) != 8:
+            raise ValueError(
+                "channelDutyCycles must contain exactly 8 values."
+            )
+
+        self.dutyCycle1 = float(dutyCycle1)
+        self.dutyCycle2 = float(dutyCycle2)
+
+        # Input 1.0 represents maximum power, corresponding to a
+        # physical high-time duty cycle of 0.5.
+        physicalDuty1 = self.dutyCycle1 / 2.0
+        physicalDuty2 = self.dutyCycle2 / 2.0
+
+        totalChips = numChips * 2
+
+        numChipsHigh1 = round(
+            totalChips * physicalDuty1 / 2
+        ) * 2
+        numChipsHigh2 = round(
+            totalChips * physicalDuty2 / 2
+        ) * 2
+
+        numChipsLow1 = totalChips - numChipsHigh1
+        numChipsLow2 = totalChips - numChipsHigh2
+
+        self._writeSpiDevice(['j',numChipsHigh1,numChipsHigh2,numChipsLow1,numChipsLow2,])
+
+        # Select profile 1 or 2 for each channel.
+        profileSelection: list[int] = []
+
+        for channelIndex, value in enumerate(channelDutyCycles):
+            if np.isclose(value, 0.0):
+                # Disabled channel: selection is irrelevant.
+                profileSelection.append(0)
+            elif np.isclose(value, self.dutyCycle1):
+                profileSelection.append(0)
+            elif np.isclose(value, self.dutyCycle2):
+                profileSelection.append(1)
+            elif np.isclose(value, 1.0):
+                # Supports binary channel-enable arrays by selecting profile 1.
+                profileSelection.append(0)
+            else:
+                raise ValueError(
+                    f"Channel {channelIndex + 1} value {value} does not "
+                    f"match profile 1 ({self.dutyCycle1}) or "
+                    f"profile 2 ({self.dutyCycle2})."
+                )
+
+        profileByte = sum(
+            selection << channel
+            for channel, selection in enumerate(profileSelection)
+        )
+
+        self._writeSpiDevice(['k', profileByte, 'a', 'a', 'a'])
 
         return self
 
-    def setPowerControl(self, powerManagementArray: list[int]) -> Self:
+    def setPowerControl(self, powerControl: bool) -> Self:
         """
-        Enables/disables driving channels on the Vitesse device.
+        Controls the external power-control GPIO.
 
         Args:
-            channelsOnArray (list[int]): Array of 0s and 1s indicating which channels to enable.
+            powerControl: True to assert the power-control signal;
+                          False to deassert it.
 
         Returns:
-            Self: Returns the instance for method chaining.
-
-        Raises:
-            ValueError: If maximum number of channels is exceeded.
-            RuntimeError: If device operation fails.
-        IMPORTANT NOTE:
-            -> If the firmware version is less than 5, it will not have the logic to interpret and understand
-            this additional command.
-            -> This check is here, so that if the version is detected as being version 5 major or newer, it will run,
-            otherwise it will be skipped.
+            Self: The current instance for method chaining.
         """
-        if not self.isSHM or int(self.version_array[0]) < 5:
+        if not self.SHM:
             return self
 
-        reversedArray = powerManagementArray[::-1]
-        channelsOn = ''.join(map(str, reversedArray))
-        channelByte = int(channelsOn[-8:], 2)
-        if self.numChannelsOnReceive > 8:
-            raise ValueError('Maximum number of channels exceeded!\n')
-        else:
-            channel: list[Union[str, int]] = ['e', channelByte, 'a', 'a', 'a']
-            self._writeSpiDevice(channel)
-            self.powerManagementArray = powerManagementArray
+        if not isinstance(powerControl, bool):
+            raise TypeError("powerControl must be True or False")
 
-        return self
+        powerByte = int(powerControl)
 
-    def setPeripheralEnable(self, peripheralsOnArray: list[int]) -> Self:
-        """
-        Enables/disables peripherals on the Vitesse device.
-        Not compatible with (thus will be skipped on) legacy binaries where version number is not present.
-
-        Args:
-            peripheralsOnArray (list[int]): Array of 0s and 1s indicating which peripherals to enable.
-
-        Returns:
-            Self: Returns the instance for method chaining.
-
-        Raises:
-            ValueError: If maximum number of peripherals is exceeded.
-            RuntimeError: If device operation fails.
-        """
-        # If version is below the legacy, do nothing (to be backward compatible with older firmware)
-        if (self.version < 1000):
-            return self
-
-        reversedPeripheralsOnArray = peripheralsOnArray[::-1]
-        peripheralsOn = ''.join(map(str, reversedPeripheralsOnArray))
-        peripheralByte = int(peripheralsOn[-8:], 2)
-        self.numPeripheralsOn = int(
-            np.count_nonzero(reversedPeripheralsOnArray))
-        self.numPeripheralsOnArray = [index for index, value in enumerate(
-            reversedPeripheralsOnArray) if value == 1]
-        self.peripheralsOnArray = peripheralsOnArray
-
-        if self.numPeripheralsOn > 8:
-            raise ValueError('Maximum number of peripherals exceeded!\n')
-
-        peripheral: list[Union[str, int]] = [
-            '9', peripheralByte, 'a', 'a', 'a']
-        self._writeSpiDevice(peripheral)
+        power: list[Union[str, int]] = [
+            'e', powerByte, 'a', 'a', 'a'
+        ]
+        self._writeSpiDevice(power)
 
         return self
 
@@ -567,7 +595,7 @@ class Vitesse:
             RuntimeError: If device operation fails.
         """
         # backward compatible with older firmware
-        if (self.version < 1000):
+        if (self.version < 6784):
             return self
 
         self.samplingMode = samplingMode
@@ -598,7 +626,7 @@ class Vitesse:
             RuntimeError: If device operation fails.
         """
         # backward compatible with older firmware
-        if (self.version < 3000):
+        if (self.version < 6784):
             return self
 
         reversedClearCountersOnArray = clearCountersOnArray[::-1]
@@ -615,7 +643,6 @@ class Vitesse:
             clearCounter: list[Union[str, int]] = [
                 'x', clearCounterByte, 'a', 'a', 'a']
             self._writeSpiDevice(clearCounter)
-            self.clearCountersOnArray = clearCountersOnArray
         return self
 
     def setClockControlEnable(self, targetClock: int) -> Self:
@@ -629,12 +656,13 @@ class Vitesse:
         :rtype: Self
         """
         # backward compatible with older firmware
-        if (self.version < 1000):
+        if (self.version < 6784):
             return self
 
-        if targetClock not in VALID_TARGET_CLOCK:
-            targetClock = min(VALID_TARGET_CLOCK,
-                              key=lambda x: abs(x - targetClock))
+        validClocks = [int(100e6), int(50e6), int(25e6)]
+
+        if targetClock not in validClocks:
+            targetClock = min(validClocks, key=lambda x: abs(x - targetClock))
 
         # Target Clock here will never evaluate to 100e6 or the fallback since it is not in VALID_CLOCKS.
         if targetClock == int(100e6):
@@ -672,17 +700,15 @@ class Vitesse:
         """
         Clears the encoders on the FPGA.
 
-        Not compatible with (thus will be skipped on) legacy binaries where version number is not present.
-
         Returns:
             Self: Returns the instance for method chaining.
         """
         # backward compatible with older firmware
-        if (self.version < 1000):
+        if (self.version < 6784):
             return self
 
-        self.clearCounterEnable([0, 0, 0, 0, 0, 0, 0, 0])
         self.clearCounterEnable([1, 0, 0, 0, 0, 0, 0, 0])
+        self.clearCounterEnable([0, 0, 0, 0, 0, 0, 0, 0])
         return self
 
     def setAverages(self, numAverages: int) -> Self:
@@ -732,7 +758,7 @@ class Vitesse:
         elif PRF < 1:
             raise ValueError('PRF too low.')
         else:
-            PRFCount = int((1/PRF)/(1/self.pulseFrequency))
+            PRFCount = int((1/PRF)/(1/self.excitationClockFrequency))
             bitPRFVals = np.binary_repr(PRFCount, width=32)
             pulse: list[Union[str, int]] = ['4', int(bitPRFVals[-8:], 2), int(
                 bitPRFVals[-16:-8], 2), int(bitPRFVals[-24:-16], 2), int(bitPRFVals[-32:-24])]
@@ -741,71 +767,68 @@ class Vitesse:
             self.prf = PRF
             return self
 
-    def setEncoderWheelbase(self, wheelbase: float) -> Self:
-        '''
-        Sets the encoder wheelbase.
-        Requires Version > 6674, otherwise the function does nothing.
-
-        :param wheelbase: The wheelbase value (larger than 0)
-        :type wheelbase: float
-        :return: Chaining self.
-        :rtype: Self
-        '''
-        if (self.version < 6674):
-            return self
-        if wheelbase <= 0:
-            raise ValueError('Wheelbase must be greater than 0.')
-        else:
+    def setEncoderParameters(self, wheelRadius1: float, wheelRadius2: float, encoderCpr1: float, encoderCpr2: float, wheelbase1: float, wheelbase2: float, wheelbase: float, radius: float, CPR: float) -> Self:
+        if self.version >= 6800:
             try:
-                # Invert, because the FPGA is doing floating point multiplication of the reciprocal
-                wheelbase = 1/wheelbase
-                wheelbase_float32 = np.float32(wheelbase)
-                wheelbase_symbols = list(wheelbase_float32.tobytes())
+                k1 = np.float32(2 * np.pi * wheelRadius1 / encoderCpr1)
+                k2 = np.float32(2 * np.pi * wheelRadius2 / encoderCpr2)
+                l = wheelbase1 + wheelbase2
+                l_inv = np.float32(1/l)
 
+                self.encoderCpr1 = encoderCpr1
+                self.encoderCpr2 = encoderCpr2
+                self.wheelRadius1 = wheelRadius1
+                self.wheelRadius2 = wheelRadius2
+                self.wheelbase1 = wheelbase1
+                self.wheelbase2 = wheelbase2
+                self.encoderCpr = encoderCpr1
+                self.wheelRadius = wheelRadius1
+                self.wheelbase = wheelbase1 + wheelbase2
+
+                k1_symbol = list(k1.tobytes())
+                k2_symbol = list(k2.tobytes())
+                wheelbase1_symbol = list(np.float32(wheelbase1).tobytes())
+                wheelbase2_symbol = list(np.float32(wheelbase2).tobytes())
+                l_inv_symbol = list(l_inv.tobytes())
+
+                symbol_Array = [k1_symbol, k2_symbol,
+                                wheelbase1_symbol, wheelbase2_symbol, l_inv_symbol]
+                char_array = ['l', 'm', 'h', 'i', 'o']
+
+                for i, symbol in enumerate(symbol_Array):
+                    pulse: list[Union[str, int]] = [char_array[i],
+                                                    symbol[0], symbol[1], symbol[2], symbol[3]]
+                    self._writeSpiDevice(pulse)
+
+                return self
+            except:
+                return self
+        elif (self.version >= 6784):
+            try:
+                wheelbase_float32 = np.float32(1/wheelbase)
+                wheelbase_symbols = list(wheelbase_float32.tobytes())
                 pulse: list[Union[str, int]] = ['h', wheelbase_symbols[0],
                                                 wheelbase_symbols[1], wheelbase_symbols[2], wheelbase_symbols[3]]
-
                 self._writeSpiDevice(pulse)
-                self.encoderWheelbase = 1/float(wheelbase_float32)
-                return self
-            except:
-                return self
+                self.wheelbase = wheelbase
 
-    def setEncoderRadiusCpr(self, radius: float, CPR: float) -> Self:
-        '''
-        Sets the encoder radius and Counts Per Revolution (CPR).
-        Requires Version > 6674, otherwise the function does nothing.
-
-        :param radius: The wheelbase radius.
-        :type radius: float
-        :param CPR: The Counts Per Revolution (CPR) value.
-        :type CPR: float
-        :return: Chaining self.
-        :rtype: Self
-        '''
-        if (self.version < 6674):
-            return self
-        if ((radius <= 0) or (CPR <= 0)):
-            raise ValueError('radius and CPR must be greater than 0.')
-        else:
-            try:
                 radius_float32 = np.float32(radius)
                 CPR_float32 = np.float32(CPR)
-
-                const_to_send = np.float32(
-                    2.0 * np.pi * float(radius_float32) / float(CPR_float32))
-                const_symbol = list(const_to_send.tobytes())
-
-                pulse: list[Union[str, int]] = ['i', const_symbol[0],
-                                                const_symbol[1], const_symbol[2], const_symbol[3]]
-
+                k1 = np.float32(2*np.pi*radius_float32/CPR_float32)
+                k1_symbol = list(k1.tobytes())
+                pulse: list[Union[str, int]] = ['i', k1_symbol[0],
+                                                k1_symbol[1], k1_symbol[2], k1_symbol[3]]
                 self._writeSpiDevice(pulse)
-                self.wheelRadius = float(radius_float32)
-                self.encoderCpr = float(CPR_float32)
-
+                self.wheelRadius = radius
+                self.encoderCpr = CPR
                 return self
+
             except:
                 return self
+        elif (self.version < 6784):
+            return self
+        else:
+            return self
 
     def getVersion(self) -> int:
         """
@@ -829,21 +852,15 @@ class Vitesse:
         version_command: list[Union[str, int]] = ['v', 'a', 'a', 'a', 'a']
 
         try:
-            # Preferred path: matches other methods (device returns 0x32 'pass')
             self._writeSpiDevice(version_command)
-            # If we get here, one status byte (0x32) has already been consumed.
         except ValueError:
-            # Device explicitly said 'invalid' (0xC8). Mirror your other methods.
             raise ValueError(
                 "getVersion: device returned 'Invalid' (200) for version command.")
         except RuntimeError:
-            # Likely no status for 'v' and our first version byte got consumed.
-            # Re-issue the command RAW to get a clean two-byte payload.
             self.spiDevice.write(b'vaaaa')
 
-        # Collect exactly two non-status bytes as the payload
         got = bytearray()
-        deadline = time.monotonic() + 0.5  # adjust if needed
+        deadline = time.monotonic() + 0.5
 
         while time.monotonic() < deadline and len(got) < 2:
             chunk = self.spiDevice.read(1)
@@ -851,14 +868,12 @@ class Vitesse:
                 time.sleep(self.READ_DELAY)
                 continue
             b = chunk[0]
-            # Skip any stray status markers that some firmwares emit
-            if b in (50, 200):  # 0x32 pass, 0xC8 invalid
+            if b in (50, 200):
                 continue
             got.append(b)
 
         if len(got) < 2:
             raise TimeoutError(f"getVersion: timeout; received={list(got)}")
-        # A check to see if this is the new set of binaries or not.
 
         hi, lo = got[0], got[1]
         version_u16 = (hi << 8) | lo
@@ -872,9 +887,8 @@ class Vitesse:
         :return: The ADC sampling frequency.
         :rtype: int
         """
-        # This function is not available on older binaries.
-        # However, for all old binaries, we are using 50 MHz, so we are directly returning the value here.
-        if self.simulation or self.version < 3000:
+
+        if self.simulation or self.version < 6784:
             return DEFAULT_ADC_FREQ
         if self.spiDevice is None:
             raise IOError(
@@ -883,24 +897,21 @@ class Vitesse:
         freq_command: list[Union[str, int]] = ['s', 'a', 'a', 'a', 'a']
 
         try:
-            # Preferred path: device returns 0x32 and _writeSpiDevice consumes it.
             self._writeSpiDevice(freq_command)
         except ValueError:
             raise ValueError(
                 "getFrequency: device returned 'Invalid' (200) for frequency command.")
         except RuntimeError:
-            # Likely no status for 's' — send raw once.
             self.spiDevice.write(b'saaaa')
             time.sleep(self.READ_DELAY)
 
-        # Read exactly one payload byte (allow at most one retry if we see a status)
         time.sleep(self.READ_DELAY)
         b = self.spiDevice.read(1)
         if not b:
             raise TimeoutError("getFrequency: timeout (no byte).")
 
         val = b[0]
-        if val in (50, 200):  # if a stray status shows up, read once more
+        if val in (50, 200):
             time.sleep(self.READ_DELAY)
             b = self.spiDevice.read(1)
             if not b:
@@ -1029,27 +1040,13 @@ class Vitesse:
         :return: Chaining self.
         :rtype: Self
         """
-        if (self.version < 1000):
+        if (self.version < 6784):
             return self
-        # -------------------------
-        # Determine messageBytes from sampling mode
-        # -------------------------
         if self.samplingMode == 16:
             self.messageBytes = 2
         else:
             self.messageBytes = 3
-
-        # -------------------------
-        # Compute additional bytes needed
-        # -------------------------
-        self.additionalBytes = 0
-        for i in range(len(self.peripheralsOnArray)):
-            self.additionalBytes += self.bytesArray[i] * \
-                self.peripheralsOnArray[i] + 2
-
-        # -------------------------
-        # Compute total bytes expected
-        # -------------------------
+        self.additionalBytes = sum(self.peripheralBytesArray) + 2
         self.totalDataBytes = int(
             self.recordPoints * self.messageBytes * self.numChannelsOnReceive + 2 * self.numChannelsOnReceive - 1)
         self.totalBytes = self.totalDataBytes + self.additionalBytes
@@ -1125,38 +1122,25 @@ class Vitesse:
                     np.random.normal(0.0, noise_std, clean.shape)
 
             echoSignal = accumulator / self.numAverages
-            echoSignal = np.tile(echoSignal, (self.numChannelsOnReceive, 1))
             self.messageArray = []
             return echoSignal
 
-        if (self.version < 3000):
+        if (self.version < 6784):
             return self._getArrayLegacy()
 
         if self.spiDevice is None:
             raise IOError(
                 "SPI Device not initialised. Perhaps you forgot to call initialise()")
 
-        # -------------------------
-        # Send acquisition command and wait
-        # -------------------------
         self.spiDevice.write(b'faaaa')
         time.sleep(self.numAverages / self.prf)
 
         byteBack = 0
-        byteArray = []
         while byteBack != 100:
             Byte = self.spiDevice.read(1)
             time.sleep(self.READ_DELAY)
             byteBack = np.frombuffer(Byte, dtype=np.uint8)
-            byteArray.append(byteBack)
-            if byteArray[-3:] == [0, 0, 0] or byteArray[-3:] == [200, 200, 200]:
-                print('Error in acquisition: Invalid response received')
-                self.refreshConfig()
-                byteBack = 100
 
-        # -------------------------
-        # Read all bytes in chunks if necessary
-        # -------------------------
         bytesBack = bytearray()
         remainingBytes = self.totalBytes
 
@@ -1169,44 +1153,55 @@ class Vitesse:
         array = np.insert(array, 0, 100)  # Sentinel
 
         dataStartingPoint = len(array) - 1 - self.additionalBytes + 2
-        self.messageArray: list[int] = []
+        self.messageArray = []
         msg_array: list[str] = []
-        for i in range(len(self.peripheralsOnArray)):
-            activeFunction = self.functionArray[i]
-            if self.peripheralsOnArray[i] == 1:
-                indices = np.arange(dataStartingPoint,
-                                    dataStartingPoint + self.bytesArray[i])
-                dataStartingPoint += self.bytesArray[i]
-                result = activeFunction(array[indices])
-                message = f"{self.sensorArray[i]}: {result}"
-                if (self.sensorArray[i] == "Internal Temperature"):
-                    self.internalTemp = result
-                if (self.sensorArray[i] == "External Temperature"):
-                    self.externalTemp = result
-                if (self.sensorArray[i] == "Encoder 1"):
-                    self.e1 = result
-                if (self.sensorArray[i] == "Encoder 2"):
-                    self.e2 = result
-                if (self.sensorArray[i] == "Encoder Cart X"):
-                    self.ex = result
-                if (self.sensorArray[i] == "Encoder Cart Y"):
-                    self.ey = result
-                if (self.sensorArray[i] == "Encoder Cart Theta"):
-                    self.etheta = result
 
-                self.messageArray.append(result)
-                msg_array.append(message)
+        for description, decoder, byteCount in zip(
+            self.peripheralDescriptionArray,
+            self.peripheralDecodeArray,
+            self.peripheralBytesArray,
+        ):
+            indices = np.arange(
+                dataStartingPoint,
+                dataStartingPoint + byteCount
+            )
+            dataStartingPoint += byteCount
 
-        # Remove peripheral bytes
+            result = decoder(array[indices])
+
+            self.messageArray.append(result)
+            msg_array.append(f"{description}: {result}")
+
+            if description == "Internal Temperature":
+                self.internalTemp = result
+            elif description == "External Temperature":
+                self.externalTemp = result
+            elif description == "Encoder 1":
+                self.encoderIndex1 = result
+            elif description == "Encoder 2":
+                self.encoderIndex2 = result
+            elif description == "Encoder Cart X":
+                self.positionX = result
+            elif description == "Encoder Cart Y":
+                self.positionY = result
+            elif description == "Encoder Cart Theta":
+                self.positionTheta = result
+            elif description == "Encoder 3":
+                self.encoderIndex3 = result
+
         indicesToDelete = np.arange(-1 * (self.additionalBytes + 1), -1)
         array = np.delete(array, indicesToDelete)
+        arr_uint8 = array.astype(np.uint8)
 
-        array = np.array(array, dtype=np.float16)
-        channel = np.split(array, self.numChannelsOnReceive)
-        channel = [ch[1:-1] for ch in channel]  # Trim first and last markers
+        def _to_binary(x: int) -> str:
+            return format(x, '08b')
+        binary_strings = np.vectorize(_to_binary)(arr_uint8)
 
-        rawBytesArray = np.empty(
-            (self.numChannelsOnReceive, self.recordPoints, self.messageBytes), dtype=float)
+        channel = np.split(binary_strings, self.numChannelsOnReceive)
+        channel = [ch[1:-1] for ch in channel]
+
+        byteArray = np.empty(
+            (self.numChannelsOnReceive, self.recordPoints, self.messageBytes), dtype='<U8')
         reshapeArray = np.empty(
             (self.numChannelsOnReceive, self.recordPoints), dtype=float)
         normArray = np.empty(
@@ -1214,20 +1209,23 @@ class Vitesse:
         echoSignal = np.empty(
             (self.numChannelsOnReceive, self.recordPoints), dtype=float)
 
-        if self.maxChannels <= 4:
-            inversionArray = [0, 3]
-        else:
-            inversionArray = [0, 1, 6, 7]
-
         for i in range(self.numChannelsOnReceive):
-            rawBytesArray[i] = np.reshape(channel[i], (-1, self.messageBytes))
-            if self.messageBytes == 3:
-                reshapeArray[i] = rawBytesArray[i][:, 2] + rawBytesArray[i][:,
-                                                                            1] * (2**8) + rawBytesArray[i][:, 0] * (2**16)
-            elif self.messageBytes == 2:
-                reshapeArray[i] = rawBytesArray[i][:, 1] * \
-                    (2**8) + rawBytesArray[i][:, 0] * (2**16)
+            byteArray[i] = np.reshape(channel[i], (-1, self.messageBytes))
+            temp: list[float] = []
+            for row in byteArray[i]:
+                joined = ''.join(row.tolist())
+                if self.messageBytes == 2:
+                    temp.append(bin16_to_int(joined))
+                elif self.messageBytes == 3:
+                    temp.append(bin24_to_int(joined))
+            reshapeArray[i] = np.array(temp)
             normArray[i] = np.divide(reshapeArray[i], self.numAverages)
+
+            if self.maxChannels <= 4:
+                inversionArray = [0, 3]
+            else:
+                inversionArray = [0, 1, 6, 7]
+
             # Conditional inversion for specific channel IDs
             if self.enabledChannelReceive[i] in inversionArray:
                 echoSignal[i] = np.subtract(normArray[i], 2048) * -1
@@ -1252,10 +1250,7 @@ class Vitesse:
             raise IOError(
                 "SPI Device not initialised. Perhaps you forgot to call initialise()")
 
-        # Work out how many additional bytes of data are needed:
-        additionalBytes = 0
-        for i in range(len(self.peripheralsOnArray)):
-            additionalBytes += self.bytesArray[i]*self.peripheralsOnArray[i]
+        additionalBytes = 30
 
         self.spiDevice.write(b'faaaa')
         time.sleep(self.numAverages/self.prf)
@@ -1278,23 +1273,16 @@ class Vitesse:
         array = np.frombuffer(bytesBack, dtype=np.uint8)
         array = np.insert(array, 0, 100)
 
-        # CODE TO HANDLE ADDITIONAL BYTES
-        dataStartingPoint = len(array) - 1 - \
-            additionalBytes  # Data starting point
-        messageArray: list[str] = []
-        for i in range(len(self.peripheralsOnArray)):
-            # This sensor is active
-            activeFunction = self.functionArray[i]
-            if self.peripheralsOnArray[i] == 1:
-                indices = np.arange(dataStartingPoint,
-                                    dataStartingPoint+self.bytesArray[i])
-                dataStartingPoint = dataStartingPoint+self.bytesArray[i]
+        self.internalTemp = None
+        self.externalTemp = None
+        self.encoderIndex1 = None
+        self.encoderIndex2 = None
+        self.positionX = None
+        self.positionY = None
+        self.positionTheta = None
+        self.encoderIndex3 = None
 
-                result = activeFunction(array[indices])
-                message = str(self.sensorArray[i]) + str(": ") + str(result)
-                messageArray.append(message)
         indicesToDelete = np.arange(-1 * (additionalBytes + 1), -1)
-        # Remove them from the main array
         array = np.delete(array, indicesToDelete)
 
         array = np.array(array, dtype=np.float16)
@@ -1302,7 +1290,7 @@ class Vitesse:
         channel = np.split(array, self.numChannelsOnReceive)
         channel = [channel[1:-1] for channel in channel]
 
-        rawBytesArray = np.empty(
+        rawperipheralBytesArray = np.empty(
             (self.numChannelsOnReceive, self.recordPoints * self.messageBytes // 3, 3), dtype=float)
         reshapeArray = np.empty(
             (self.numChannelsOnReceive, self.recordPoints), dtype=float)
@@ -1317,9 +1305,9 @@ class Vitesse:
             inversionArray = [0, 1, 6, 7]
 
         for i in range(self.numChannelsOnReceive):
-            rawBytesArray[i] = np.reshape(channel[i], (-1, 3))
-            reshapeArray[i] = rawBytesArray[i][:, 0] + rawBytesArray[i][:,
-                                                                        1] * (2**8) + rawBytesArray[i][:, 2] * (2**16)
+            rawperipheralBytesArray[i] = np.reshape(channel[i], (-1, 3))
+            reshapeArray[i] = rawperipheralBytesArray[i][:, 0] + rawperipheralBytesArray[i][:,
+                                                                                            1] * (2**8) + rawperipheralBytesArray[i][:, 2] * (2**16)
             normArray[i] = np.divide(reshapeArray[i], self.numAverages)
             # Conditional inversion for specific channel IDs
             if self.enabledChannelReceive[i] in inversionArray:
@@ -1331,7 +1319,7 @@ class Vitesse:
 
     def setSleepTime(self, sleepTime: int) -> Self:
         """
-        Set the sleep time for the uC.
+        Set the sleep time for an external microcontroller.
         The input is the sleep time in minutes.
 
         :param sleepTime: The sleep time, measured in minutes (Valid Range: 0-20000)
@@ -1339,7 +1327,7 @@ class Vitesse:
         :return: Returns the instance for method chaining.
         :rtype: Self
         """
-        if not self.isSHM:
+        if not self.SHM:
             return self
 
         if sleepTime > 20000:
@@ -1347,7 +1335,7 @@ class Vitesse:
         elif sleepTime < 0:
             raise ValueError('Sleep time cannot be negative.')
         else:
-            bitSTVals = np.binary_repr(sleepTime, width=32)
+            bitSTVals = np.binary_repr(sleepTime*12, width=32)
             pulse: list[Union[str, int]] = [
                 'r', int(bitSTVals[-8:], 2), 'a', 'a', 'a']
 
@@ -1356,7 +1344,7 @@ class Vitesse:
 
     def checkShm(self) -> int:
         """
-        This function checks whether the connected system is an SHM system.
+        This function checks whether the connected system is a Vitesse device with SHM capabilities.
         """
         try:
             if self.spiDevice is None:
@@ -1367,33 +1355,30 @@ class Vitesse:
                 'g', 'a', 'a', 'a', 'a']
 
             try:
-                # Preferred path: device returns 0x32 and _writeSpiDevice consumes it.
                 self._writeSpiDevice(check_shm_command)
             except ValueError:
                 raise ValueError(
                     "check_shm_command: device returned 'Invalid' (200) for checkShm command.")
             except RuntimeError:
-                # Likely no status for 's' — send raw once.
                 self.spiDevice.write(b'gaaaa')
                 time.sleep(self.READ_DELAY)
 
-            # Read exactly one payload byte (allow at most one retry if we see a status)
             time.sleep(self.READ_DELAY)
             b = self.spiDevice.read(1)
             if not b:
                 raise TimeoutError("check_shm: timeout (no byte).")
 
             val = b[0]
-            if val in (50, 200):  # if a stray status shows up, read once more
+            if val in (50, 200):
                 time.sleep(self.READ_DELAY)
                 b = self.spiDevice.read(1)
                 if not b:
                     raise TimeoutError("check_shm: timeout after status byte.")
                 val = b[0]
-            self.isSHM = True
+            self.SHM = True
         except:
             val = 0
-            self.isSHM = False
+            self.SHM = False
         return val
 
     def closeDevice(self) -> None:
