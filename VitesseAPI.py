@@ -29,7 +29,7 @@ from .utils import (
 )
 
 DEFAULT_ADC_FREQUENCY = int(50e6)
-VALID_TARGET_CLOCKS = [int(100e6), int(50e6), int(25e6)]
+VALID_TARGET_CLOCKS = [int(50e6), int(25e6)]
 
 _LEGACY_PARAMETER_NAMES = {
     "serialNumber": "serial_number",
