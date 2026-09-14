@@ -1,14 +1,18 @@
+"""Conversion and display utilities for the Vitesse API."""
+
 from __future__ import annotations
-import numpy as np
+
 import math
 import struct
-from typing import Any, TYPE_CHECKING
+from typing import TYPE_CHECKING
+
+import numpy as np
 
 if TYPE_CHECKING:
     from VitesseAPI import Vitesse
 
 
-def ext_temp(np_list: np.ndarray[Any, np.dtype[np.integer[Any]]]) -> float:
+def ext_temp(np_list: np.ndarray) -> float:
     """
     Convert two-byte RTD data into degrees Celsius.
 
@@ -32,38 +36,35 @@ def ext_temp(np_list: np.ndarray[Any, np.dtype[np.integer[Any]]]) -> float:
     """
     if len(np_list) != 2:
         raise ValueError(
-            "np_list must contain exactly two bytes: [byte2, byte3]")
+            "Input must contain exactly two bytes: [byte2, byte3]")
 
     byte2, byte3 = np_list
     byte2 = int(byte2)
     byte3 = int(byte3)
 
-    # Reconstruct the 15-bit RTD ADC code.
     data = (byte2 << 7) + (byte3 >> 1)
 
-    # Convert the ADC code to resistance.
     ratio = data / 32768.0
-    RREF = 3900  # Reference resistance in ohms.
-    resistance = RREF * ratio
+    reference_resistance = 3900
+    resistance = reference_resistance * ratio
 
-    # Apply the inverse Callendar-Van Dusen formula.
-    iCVD_A = 3.9083e-3
-    iCVD_B = -5.775e-7
-    PT100_NOMINAL = 100.0  # ohms
+    cvd_a = 3.9083e-3
+    cvd_b = -5.775e-7
+    pt100_nominal = 100.0
 
-    Z1 = -iCVD_A
-    Z2 = iCVD_A ** 2 - (4 * iCVD_B)
-    Z3 = (4 * iCVD_B) / PT100_NOMINAL
-    Z4 = 2 * iCVD_B
+    z1 = -cvd_a
+    z2 = cvd_a**2 - (4 * cvd_b)
+    z3 = (4 * cvd_b) / pt100_nominal
+    z4 = 2 * cvd_b
     try:
-        temp = Z2 + (Z3 * resistance)
-        temp = (math.sqrt(temp) + Z1) / Z4
-    except:
+        temp = z2 + (z3 * resistance)
+        temp = (math.sqrt(temp) + z1) / z4
+    except ValueError:
         temp = 0
     return temp
 
 
-def int_temp(np_list: np.ndarray[Any, np.dtype[np.uint8]]) -> float:
+def int_temp(np_list: np.ndarray) -> float:
     """
     Convert the FPGA/XADC internal temperature register to degrees Celsius.
 
@@ -85,21 +86,16 @@ def int_temp(np_list: np.ndarray[Any, np.dtype[np.uint8]]) -> float:
         If the input is not a two-element ``np.uint8`` array.
     """
     if len(np_list) != 2 or np_list.dtype != np.uint8:
-        raise ValueError("Input must be a NumPy array of two uint8 bytes.")
+        raise ValueError("Input must be a NumPy array of two uint8 bytes")
 
-    # Combine the two bytes into a 16-bit word.
     raw16 = (int(np_list[0]) << 8) | int(np_list[1])
-
-    # Extract the top 12 bits containing the temperature code.
     temp_code = raw16 >> 4
-
-    # Convert the temperature code to degrees Celsius.
     temperature_c = (temp_code * 503.975 / 4096.0) - 273.15
 
     return temperature_c
 
 
-def dec_enc(bytes_array: np.ndarray[Any, np.dtype[np.uint8]]) -> int:
+def dec_enc(bytes_array: np.ndarray) -> int:
     """
     Decode a signed 32-bit encoder count from four MSB-first bytes.
 
@@ -119,18 +115,13 @@ def dec_enc(bytes_array: np.ndarray[Any, np.dtype[np.uint8]]) -> int:
         If the input does not contain exactly four bytes.
     """
     if len(bytes_array) != 4:
-        raise ValueError("Expected exactly 4 bytes.")
+        raise ValueError("Expected exactly 4 bytes")
 
-    # Decode the bytes as a signed, big-endian integer.
-    count = int.from_bytes(
-        bytes(int(value) for value in bytes_array),
-        byteorder='big',
-        signed=True,
-    )
+    count = int.from_bytes(bytes_array, byteorder="big", signed=True)
     return count
 
 
-def dec_enc_float(bytes_array: np.ndarray[Any, np.dtype[np.uint8]]) -> float:
+def dec_enc_float(bytes_array: np.ndarray) -> float:
     """
     Decode a 32-bit IEEE-754 floating-point value from four MSB-first bytes.
 
@@ -150,16 +141,10 @@ def dec_enc_float(bytes_array: np.ndarray[Any, np.dtype[np.uint8]]) -> float:
         If the input does not contain exactly four bytes.
     """
     if len(bytes_array) != 4:
-        raise ValueError("Expected exactly 4 bytes.")
+        raise ValueError("Expected exactly 4 bytes")
 
-    # Decode the bytes as an unsigned, big-endian bit pattern.
-    count = int.from_bytes(
-        bytes(int(value) for value in bytes_array),
-        byteorder='big',
-        signed=False,
-    )
-    # Interpret the bit pattern as an IEEE-754 single-precision float.
-    return struct.unpack('>f', struct.pack('>I', count))[0]
+    count = int.from_bytes(bytes_array, byteorder="big", signed=False)
+    return struct.unpack(">f", struct.pack(">I", count))[0]
 
 
 def bin24_to_int(bin_str: str) -> int:
@@ -176,9 +161,7 @@ def bin24_to_int(bin_str: str) -> int:
     int
         The unsigned integer represented by the binary string.
     """
-    assert len(bin_str) == 24, "Input must be a 24-bit binary string."
-
-    # Parse the binary string as an unsigned integer.
+    assert len(bin_str) == 24, "Input must be a 24-bit binary string"
     val = int(bin_str, 2)
 
     return val
@@ -198,9 +181,7 @@ def bin16_to_int(bin_str: str) -> int:
     int
         The parsed value shifted left by eight bits.
     """
-    assert len(bin_str) == 16, "Input must be a 24-bit binary string."
-
-    # Parse the binary string as an unsigned integer, then align it to 24 bits.
+    assert len(bin_str) == 16, "Input must be a 16-bit binary string"
     val = int(bin_str, 2) << 8
 
     return val
@@ -221,9 +202,9 @@ def decode_version(version_u16: int) -> list[int]:
     list[int]
         The version components in major, minor, beta order.
     """
-    major = (version_u16 >> 8) & 0xFF   # Extract bits 15-8.
-    minor = (version_u16 >> 4) & 0xF    # Extract bits 7-4.
-    beta = version_u16 & 0xF           # Extract bits 3-0.
+    major = (version_u16 >> 8) & 0xFF
+    minor = (version_u16 >> 4) & 0xF
+    beta = version_u16 & 0xF
 
     return [major, minor, beta]
 
@@ -243,20 +224,13 @@ def _print_config_table(
     """
     table_rows = [headers, *rows] if headers else rows
     split_rows = [
-        [str(value).splitlines() or [""] for value in row]
-        for row in table_rows
+        [str(value).splitlines() or [""] for value in row] for row in table_rows
     ]
     column_widths = [
-        max(
-            len(line)
-            for row in split_rows
-            for line in row[column]
-        )
+        max(len(line) for row in split_rows for line in row[column])
         for column in range(len(table_rows[0]))
     ]
-    border = "+" + "+".join(
-        "-" * (width + 2) for width in column_widths
-    ) + "+"
+    border = "+" + "+".join("-" * (width + 2) for width in column_widths) + "+"
 
     print(border)
     for row_index, row in enumerate(split_rows):
@@ -272,28 +246,28 @@ def _print_config_table(
     print(border)
 
 
-def getVersion(obj: Vitesse) -> None:
+def get_version(obj: Vitesse) -> None:
     """
     Print the firmware and API version information for a Vitesse device.
 
     Parameters:
     -----------
     obj : Vitesse
-        Device object containing ``versionArray``, ``apiVersion``, and
-        ``maxChannels`` attributes.
+        Device object containing ``version_array``, ``api_version``, and
+        ``max_channels`` attributes.
     """
-    version_u16 = obj.versionArray
+    version_u16 = obj.version_array
     version_display = ""
     for i, element in enumerate(version_u16):
-        if i != len(version_u16)-1:
+        if i != len(version_u16) - 1:
             version_display = version_display + str(element) + "."
         else:
             version_display = version_display + str(element)
 
     api_version_display = ""
-    version_u16 = obj.apiVersion
+    version_u16 = obj.api_version
     for i, element in enumerate(version_u16):
-        if i != len(version_u16)-1:
+        if i != len(version_u16) - 1:
             api_version_display = api_version_display + str(element) + "."
         else:
             api_version_display = api_version_display + str(element)
@@ -301,14 +275,14 @@ def getVersion(obj: Vitesse) -> None:
     rows: list[list[str]] = [
         ["Firmware Version", f"{version_display}"],
         ["API Version", f"{api_version_display}"],
-        ["Maximum Number of Channels", f"{obj.maxChannels}"],
+        ["Maximum Number of Channels", f"{obj.max_channels}"],
     ]
 
     print("\nDevice and API Version:")
     _print_config_table(rows)
 
 
-def getConfig(obj: Vitesse) -> None:
+def get_config(obj: Vitesse) -> None:
     """
     Print the current configuration parameters of a Vitesse device.
 
@@ -320,37 +294,54 @@ def getConfig(obj: Vitesse) -> None:
         one-based numbering, while the object's arrays are not modified.
     """
 
-    peripheralDescriptionArray = obj.peripheralDescriptionArray
+    peripheral_descriptions = obj.peripheral_descriptions
 
     enabled_sensors = [
         sensor
-        for sensor, enabled in zip(peripheralDescriptionArray, [1,1,1,1,1,1,1,1])
+        for sensor, enabled in zip(peripheral_descriptions, [1, 1, 1, 1, 1, 1, 1, 1])
         if enabled and sensor != "NA"
     ]
-    additional_data = "\n".join(
-        str(enabled_sensors[index:index + 2])
-        for index in range(0, len(enabled_sensors), 2)
-    ) or "[]"
-    receiving_channels = [channel + 1 for channel in obj.enabledChannelReceive]
-    driving_channels = [channel + 1 for channel in obj.enabledChannelDrive]
+    additional_data = (
+        "\n".join(
+            str(enabled_sensors[index: index + 2])
+            for index in range(0, len(enabled_sensors), 2)
+        )
+        or "[]"
+    )
+    receiving_channels = [
+        channel + 1 for channel in obj.enabled_receive_channels]
+    driving_channels = [channel + 1 for channel in obj.enabled_drive_channels]
 
     rows: list[list[str]] = [
-        ["Excitation Frequency",
-            f"{obj.excitationFrequency/1_000_000:.2f}", "MHz"],
-        ["ADC Sampling Frequency",
-            f"{int(obj.adcFrequency)/1_000_000:.2f}", "MHz"],
-        ["Excitation Clock Frequency",
-            f"{obj.excitationClockFrequency/1_000_000:.2f}", "MHz"],
+        [
+            "Excitation Frequency",
+            f"{obj.excitation_frequency/1_000_000:.2f}",
+            "MHz",
+        ],
+        [
+            "ADC Sampling Frequency",
+            f"{int(obj.adc_frequency)/1_000_000:.2f}",
+            "MHz",
+        ],
+        [
+            "Excitation Clock Frequency",
+            f"{obj.excitation_clock_frequency/1_000_000:.2f}",
+            "MHz",
+        ],
         ["Pulse Repetition Frequency (PRF)", f"{obj.prf}", "Hz"],
-        ["Number of Averages", f"{obj.numAverages}", ""],
-        ["Record Length", f"{obj.recordLength*1e6}", "us"],
+        ["Number of Averages", f"{obj.num_averages}", ""],
+        ["Record Length", f"{obj.record_length*1e6}", "us"],
         ["Additional Data", additional_data, ""],
-        ["Data Sampling Mode", f"{obj.samplingMode}", "bits"],
+        ["Data Sampling Mode", f"{obj.sampling_mode}", "bits"],
         ["Channels Receiving", f"{receiving_channels}", ""],
         ["Channels Driving", f"{driving_channels}", ""],
-        ["Encoder CPR", f"{obj.encoderCpr}", ""],
+        ["Encoder CPR", f"{obj.encoder_cpr}", ""],
         ["Encoder Wheelbase", f"{obj.wheelbase}", "mm"],
-        ["Wheel Radius", f"{obj.wheelRadius}", "mm"],
+        ["Wheel Radius", f"{obj.wheel_radius}", "mm"],
     ]
     print("\nDevice Setting Configuration:")
     _print_config_table(rows)
+
+
+globals()["getVersion"] = get_version
+globals()["getConfig"] = get_config
