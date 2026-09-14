@@ -1,1 +1,1 @@
-from .VitesseAPI import Vitesse, initialiseVitesse  # type: ignore
+from .VitesseAPI import Vitesse, initialise_vitesse  # type: ignore

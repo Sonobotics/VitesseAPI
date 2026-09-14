@@ -31,53 +31,6 @@ from .utils import (
 DEFAULT_ADC_FREQUENCY = int(50e6)
 VALID_TARGET_CLOCKS = [int(50e6), int(25e6)]
 
-_LEGACY_PARAMETER_NAMES = {
-    "serialNumber": "serial_number",
-    "phaseArrayMicro": "phase_array_microseconds",
-    "delayArrayMicro": "delay_array_microseconds",
-    "recordLength": "record_length",
-    "PRF": "prf",
-    "numCycles": "num_cycles",
-    "numChips": "num_chips",
-    "channelsOnReceive": "receive_channels",
-    "channelsOnDrive": "drive_channels",
-    "numAverages": "num_averages",
-    "samplingMode": "sampling_mode",
-    "excitationClockFrequency": "excitation_clock_frequency",
-    "excitationFrequency": "excitation_frequency",
-    "targetClock": "target_clock",
-    "dutyCycle1": "duty_cycle_1",
-    "dutyCycle2": "duty_cycle_2",
-    "channelDutyCycles": "channel_duty_cycles",
-    "channelsOnDutyCycle": "channel_duty_cycles",
-    "wheelRadius": "wheel_radius",
-    "wheelRadius1": "wheel_radius_1",
-    "wheelRadius2": "wheel_radius_2",
-    "encoderCpr": "encoder_cpr",
-    "encoderCpr1": "encoder_cpr_1",
-    "encoderCpr2": "encoder_cpr_2",
-    "CPR": "cpr",
-    "wheelbase1": "wheelbase_1",
-    "wheelbase2": "wheelbase_2",
-    "powerControl": "power_control",
-    "sleepTime": "sleep_time",
-}
-
-
-def _legacy_method_alias(method: Callable) -> Callable:
-    """Create a compatibility wrapper for a former camelCase method."""
-
-    @wraps(method)
-    def wrapper(*args, **kwargs):
-        converted_kwargs = {
-            _LEGACY_PARAMETER_NAMES.get(name, name): value
-            for name, value in kwargs.items()
-        }
-        return method(*args, **converted_kwargs)
-
-    return wrapper
-
-
 @contextmanager
 def initialise_vitesse(serial_number: Optional[str] = None, simulation: bool = False):
     """Open a Vitesse device and close it when the context exits."""
@@ -2019,13 +1972,3 @@ _LEGACY_METHOD_NAMES = {
     "setSleepTime": "set_sleep_time",
     "closeDevice": "close_device",
 }
-
-for _legacy_name, _method_name in _LEGACY_METHOD_NAMES.items():
-    setattr(
-        Vitesse,
-        _legacy_name,
-        _legacy_method_alias(getattr(Vitesse, _method_name)),
-    )
-
-setattr(Vitesse, "listDevices", staticmethod(Vitesse.list_devices))
-globals()["initialiseVitesse"] = _legacy_method_alias(initialise_vitesse)
