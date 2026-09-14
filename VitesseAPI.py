@@ -244,7 +244,8 @@ class Vitesse:
         legacy_name = self._LEGACY_ATTRIBUTE_NAMES.get(name)
         if legacy_name is not None:
             return object.__getattribute__(self, legacy_name)
-        raise AttributeError(f"{type(self).__name__!s} has no attribute {name!r}")
+        raise AttributeError(
+            f"{type(self).__name__!s} has no attribute {name!r}")
 
     def __setattr__(self, name: str, value) -> None:
         mapped_name = self._LEGACY_ATTRIBUTE_NAMES.get(name, name)
@@ -319,7 +320,8 @@ class Vitesse:
             or initial_buffer[-2] != 200
             or initial_buffer[-3] != 200
         ):
-            initial_buffer = np.frombuffer(self.spi_device.read(1000), dtype=np.uint8)
+            initial_buffer = np.frombuffer(
+                self.spi_device.read(1000), dtype=np.uint8)
 
         self.max_channels = devices[0][2]
         self._set_adc_threshold()
@@ -356,7 +358,8 @@ class Vitesse:
 
         for i in range(0, num_devices):
             try:
-                spi_device = sbftdi.sonoboticsFtdiChannel("SPI", "deviceNum", i)
+                spi_device = sbftdi.sonoboticsFtdiChannel(
+                    "SPI", "deviceNum", i)
             except Exception:
                 continue
             eeprom_data = spi_device.readEEPROM()
@@ -613,7 +616,8 @@ class Vitesse:
             The current instance for method chaining.
         """
 
-        self._calculate_num_chips(excitation_clock_frequency, excitation_frequency)
+        self._calculate_num_chips(
+            excitation_clock_frequency, excitation_frequency)
 
         self.sampling_mode = sampling_mode
 
@@ -746,11 +750,13 @@ class Vitesse:
         reversed_receive_channels = receive_channels[::-1]
         channel_bits = "".join(map(str, reversed_receive_channels))
         channel_byte = int(channel_bits[-8:], 2)
-        self.num_receive_channels = int(np.count_nonzero(reversed_receive_channels))
+        self.num_receive_channels = int(
+            np.count_nonzero(reversed_receive_channels))
         self.enabled_receive_channels = [
             index for index, value in enumerate(receive_channels) if value == 1
         ]
-        self.num_receive_channels = int(np.count_nonzero(reversed_receive_channels))
+        self.num_receive_channels = int(
+            np.count_nonzero(reversed_receive_channels))
         self.enabled_receive_channels = [
             index for index, value in enumerate(receive_channels) if value == 1
         ]
@@ -791,7 +797,8 @@ class Vitesse:
         reversed_drive_channels = drive_channels[::-1]
         channel_bits = "".join(map(str, reversed_drive_channels))
         channel_byte = int(channel_bits[-8:], 2)
-        self.num_drive_channels = int(np.count_nonzero(reversed_drive_channels))
+        self.num_drive_channels = int(
+            np.count_nonzero(reversed_drive_channels))
         self.enabled_drive_channels = [
             index for index, value in enumerate(drive_channels) if value == 1
         ]
@@ -926,7 +933,8 @@ class Vitesse:
             return self
 
         if len(channel_duty_cycles) != 8:
-            raise ValueError("Channel duty cycles must contain exactly 8 values")
+            raise ValueError(
+                "Channel duty cycles must contain exactly 8 values")
 
         profile_selection: list[int] = []
 
@@ -1109,7 +1117,8 @@ class Vitesse:
         reversed_counter_clear_mask = counter_clear_mask[::-1]
         counter_clear_bits = "".join(map(str, reversed_counter_clear_mask))
         counter_clear_byte = int(counter_clear_bits[-8:], 2)
-        self.num_clear_counters = int(np.count_nonzero(reversed_counter_clear_mask))
+        self.num_clear_counters = int(
+            np.count_nonzero(reversed_counter_clear_mask))
         self.enabled_clear_counters = [
             index
             for index, value in enumerate(reversed_counter_clear_mask)
@@ -1147,7 +1156,8 @@ class Vitesse:
             return self
 
         if target_clock not in VALID_TARGET_CLOCKS:
-            target_clock = min(VALID_TARGET_CLOCKS, key=lambda x: abs(x - target_clock))
+            target_clock = min(VALID_TARGET_CLOCKS,
+                               key=lambda x: abs(x - target_clock))
 
         if target_clock == int(100e6):
             clock_control_mask = [1, 0, 0, 0, 0, 0, 0, 0]
@@ -1161,7 +1171,8 @@ class Vitesse:
         clock_control_mask_reversed = clock_control_mask
         counter_clear_bits = "".join(map(str, clock_control_mask_reversed))
         counter_clear_byte = int(counter_clear_bits[-8:], 2)
-        self.num_clear_counters = int(np.count_nonzero(clock_control_mask_reversed))
+        self.num_clear_counters = int(
+            np.count_nonzero(clock_control_mask_reversed))
         self.selected_clock_bits = [
             index
             for index, value in enumerate(clock_control_mask_reversed)
@@ -1503,7 +1514,8 @@ class Vitesse:
         """
         self.phase_array_microseconds = phase_array_microseconds
         phase_cycles = np.ceil(
-            np.array(phase_array_microseconds[::-1]) * self.adc_frequency / 1_000_000
+            np.array(phase_array_microseconds[::-1]
+                     ) * self.adc_frequency / 1_000_000
         )
         phasing_active = any(phase_cycles > 0)
         if not phasing_active:
@@ -1546,7 +1558,8 @@ class Vitesse:
         """
         self.delay_array_microseconds = delay_array_microseconds
         delay_cycles = np.ceil(
-            np.array(delay_array_microseconds[::-1]) * self.adc_frequency / 1_000_000
+            np.array(delay_array_microseconds[::-1]
+                     ) * self.adc_frequency / 1_000_000
         )
         delay_active = any(delay_cycles > 0)
         if not delay_active:
@@ -1628,7 +1641,8 @@ class Vitesse:
                 self.adc_frequency = DEFAULT_ADC_FREQUENCY
             if self.record_points <= 0:
                 if self.record_length and self.record_length > 0:
-                    self.record_points = int(self.record_length * self.adc_frequency)
+                    self.record_points = int(
+                        self.record_length * self.adc_frequency)
                 else:
                     self.record_points = 2048
             if self.num_receive_channels <= 0:
@@ -1653,7 +1667,8 @@ class Vitesse:
             elapsed = now - self._sim_last_switch_t
             steps = int(elapsed // switch_period_s)
             if steps > 0:
-                self._sim_file_index = (self._sim_file_index + steps) % len(sim_files)
+                self._sim_file_index = (
+                    self._sim_file_index + steps) % len(sim_files)
                 self._sim_last_switch_t += steps * switch_period_s
 
             sim_file = sim_files[self._sim_file_index]
@@ -1669,7 +1684,8 @@ class Vitesse:
             accumulator = np.zeros_like(clean)
 
             for _ in range(self.num_averages):
-                accumulator += clean + np.random.normal(0.0, noise_std, clean.shape)
+                accumulator += clean + \
+                    np.random.normal(0.0, noise_std, clean.shape)
 
             echo_signal = accumulator / self.num_averages
             self.message_array = []
@@ -1774,7 +1790,8 @@ class Vitesse:
                 elif self.message_bytes == 3:
                     temp.append(bin24_to_int(joined))
             reshaped_array[i] = np.array(temp)
-            normalised_array[i] = np.divide(reshaped_array[i], self.num_averages)
+            normalised_array[i] = np.divide(
+                reshaped_array[i], self.num_averages)
 
             if self.max_channels <= 4:
                 inversion_array = [0, 3]
@@ -1883,7 +1900,8 @@ class Vitesse:
                 + raw_sample_bytes[i][:, 1] * (2**8)
                 + raw_sample_bytes[i][:, 2] * (2**16)
             )
-            normalised_array[i] = np.divide(reshaped_array[i], self.num_averages)
+            normalised_array[i] = np.divide(
+                reshaped_array[i], self.num_averages)
             if self.enabled_receive_channels[i] in inversion_array:
                 echo_signal[i] = np.subtract(normalised_array[i], 2048) * -1
             else:
@@ -1968,7 +1986,8 @@ class Vitesse:
                 or final_buffer[-2] != 200
                 or final_buffer[-3] != 200
             ):
-                final_buffer = np.frombuffer(self.spi_device.read(1000), dtype=np.uint8)
+                final_buffer = np.frombuffer(
+                    self.spi_device.read(1000), dtype=np.uint8)
 
         self.set_receive_channels([0, 0, 0, 0, 0, 0, 0, 0])
         self.spi_device.close()
