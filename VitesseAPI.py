@@ -31,6 +31,7 @@ from .utils import (
 DEFAULT_ADC_FREQUENCY = int(50e6)
 VALID_TARGET_CLOCKS = [int(50e6), int(25e6)]
 
+
 @contextmanager
 def initialise_vitesse(serial_number: Optional[str] = None, simulation: bool = False):
     """Open a Vitesse device and close it when the context exits."""
@@ -45,67 +46,6 @@ def initialise_vitesse(serial_number: Optional[str] = None, simulation: bool = F
 
 class Vitesse:
     """Control and acquire data from a SONUS Vitesse device."""
-
-    _LEGACY_ATTRIBUTE_NAMES = {
-        "spiDevice": "spi_device",
-        "READ_DELAY": "read_delay",
-        "MAX_READ_CHUNK": "max_read_chunk",
-        "THRESHOLD_LEVEL": "threshold_level",
-        "TRIGGER": "trigger",
-        "adcFrequency": "adc_frequency",
-        "recordLength": "record_length",
-        "phaseArrayMicro": "phase_array_microseconds",
-        "delayArrayMicro": "delay_array_microseconds",
-        "samplingMode": "sampling_mode",
-        "numAverages": "num_averages",
-        "maxChannels": "max_channels",
-        "excitationClockFrequency": "excitation_clock_frequency",
-        "excitationFrequency": "excitation_frequency",
-        "numChips": "num_chips",
-        "numChannelsOnReceive": "num_receive_channels",
-        "ChannelsOnReceive": "receive_channel_mask",
-        "enabledChannelReceive": "enabled_receive_channels",
-        "numChannelsOnDrive": "num_drive_channels",
-        "ChannelsOnDrive": "drive_channel_mask",
-        "enabledChannelDrive": "enabled_drive_channels",
-        "recordPoints": "record_points",
-        "numChannelsFromFPGA": "num_channels_from_fpga",
-        "dutyCycle1": "duty_cycle_1",
-        "dutyCycle2": "duty_cycle_2",
-        "additionalBytes": "additional_bytes",
-        "totalDataBytes": "total_data_bytes",
-        "totalBytes": "total_bytes",
-        "messageArray": "message_array",
-        "messageBytes": "message_bytes",
-        "apiVersion": "api_version",
-        "versionArray": "version_array",
-        "internalTemp": "internal_temperature",
-        "externalTemp": "external_temperature",
-        "encoderIndex1": "encoder_count_1",
-        "encoderIndex2": "encoder_count_2",
-        "encoderIndex3": "encoder_count_3",
-        "positionX": "position_x",
-        "positionY": "position_y",
-        "positionTheta": "position_theta",
-        "peripheralDescriptionArray": "peripheral_descriptions",
-        "peripheralDecodeArray": "peripheral_decoders",
-        "peripheralBytesArray": "peripheral_byte_counts",
-        "wheelRadius": "wheel_radius",
-        "encoderCpr": "encoder_cpr",
-        "encoderCpr1": "encoder_cpr_1",
-        "encoderCpr2": "encoder_cpr_2",
-        "wheelRadius1": "wheel_radius_1",
-        "wheelRadius2": "wheel_radius_2",
-        "wheelbase1": "wheelbase_1",
-        "wheelbase2": "wheelbase_2",
-        "SHM": "shm",
-        "e1": "encoder_count_1",
-        "e2": "encoder_count_2",
-        "e3": "encoder_count_3",
-        "ex": "position_x",
-        "ey": "position_y",
-        "etheta": "position_theta",
-    }
 
     def __init__(self):
         """Initialise the API state with default values."""
@@ -192,17 +132,6 @@ class Vitesse:
         self.wheelbase_2: float = 0
 
         self.shm: bool = False
-
-    def __getattr__(self, name: str):
-        legacy_name = self._LEGACY_ATTRIBUTE_NAMES.get(name)
-        if legacy_name is not None:
-            return object.__getattribute__(self, legacy_name)
-        raise AttributeError(
-            f"{type(self).__name__!s} has no attribute {name!r}")
-
-    def __setattr__(self, name: str, value) -> None:
-        mapped_name = self._LEGACY_ATTRIBUTE_NAMES.get(name, name)
-        object.__setattr__(self, mapped_name, value)
 
     def __enter__(self):
         return self
@@ -914,69 +843,6 @@ class Vitesse:
         self._write_spi_device(["k", profile_byte, "a", "a", "a"])
 
         return self
-
-    def _set_legacy_duty_cycles(
-        self,
-        duty_cycle_1: float,
-        duty_cycle_2: float,
-        *args,
-        channel_duty_cycles: Optional[list[float]] = None,
-        num_chips: Optional[int] = None,
-    ) -> Self:
-        """
-        Support both former camelCase duty-cycle signatures.
-
-        Parameters:
-        -----------
-        duty_cycle_1 : float
-            Profile 1 duty-cycle setting from 0 to 1.
-        duty_cycle_2 : float
-            Profile 2 duty-cycle setting from 0 to 1.
-        *args
-            Legacy positional channel selection and chip-count arguments.
-        channel_duty_cycles : list[float] | None, optional
-            Per-channel duty-cycle values used by the merged signature.
-        num_chips : int | None, optional
-            Number of chips per excitation cycle.
-
-        Returns:
-        --------
-        Self
-            The current instance for method chaining.
-
-        Raises:
-        -------
-        TypeError
-            If the supplied arguments do not match a supported legacy
-            signature.
-        """
-        if len(args) > 2:
-            raise TypeError("Too many duty-cycle arguments")
-
-        if len(args) == 2:
-            if channel_duty_cycles is not None or num_chips is not None:
-                raise TypeError("Duty-cycle arguments were supplied twice")
-            channel_duty_cycles, num_chips = args
-        elif len(args) == 1:
-            if channel_duty_cycles is None and num_chips is None:
-                num_chips = args[0]
-            elif channel_duty_cycles is None:
-                channel_duty_cycles = args[0]
-            elif num_chips is None:
-                num_chips = args[0]
-            else:
-                raise TypeError("Duty-cycle arguments were supplied twice")
-
-        if num_chips is None:
-            raise TypeError("Number of chips is required")
-        if channel_duty_cycles is None:
-            return self._set_duty_cycle_profiles(duty_cycle_1, duty_cycle_2, num_chips)
-        return self.set_duty_cycles(
-            duty_cycle_1,
-            duty_cycle_2,
-            channel_duty_cycles,
-            num_chips,
-        )
 
     def set_power_control(self, power_control: bool) -> Self:
         """
@@ -1946,29 +1812,3 @@ class Vitesse:
         self.spi_device.close()
 
         self.spi_device = None
-
-
-_LEGACY_METHOD_NAMES = {
-    "setConfig": "set_config",
-    "setSymbol": "set_symbol",
-    "setChannelReceive": "set_receive_channels",
-    "setChannelDrive": "set_drive_channels",
-    "setDutyCycles": "_set_legacy_duty_cycles",
-    "setChannelDutyCycle": "_set_channel_duty_cycles",
-    "setPowerControl": "set_power_control",
-    "setSamplingMode": "set_sampling_mode",
-    "setClockControlEnable": "set_target_clock",
-    "clearEncoders": "clear_encoders",
-    "setAverages": "set_averages",
-    "setPrf": "set_prf",
-    "setEncoderParameters": "set_encoder_parameters",
-    "getVersion": "get_version",
-    "getFrequency": "get_frequency",
-    "setRecordLength": "set_record_length",
-    "setTriggerPhasing": "set_trigger_phasing",
-    "setRecordDelay": "set_record_delay",
-    "getPeripheralData": "get_peripheral_data",
-    "getArray": "get_array",
-    "setSleepTime": "set_sleep_time",
-    "closeDevice": "close_device",
-}
