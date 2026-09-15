@@ -30,6 +30,9 @@ from .utils import (
 
 DEFAULT_ADC_FREQUENCY = int(50e6)
 VALID_TARGET_CLOCKS = [int(50e6), int(25e6)]
+VERSION_26_2_4 = 0x1A24
+VERSION_26_8_0 = 0x1A80
+VERSION_26_9_0 = 0x1A90
 
 
 @contextmanager
@@ -132,6 +135,17 @@ class Vitesse:
         self.wheelbase_2: float = 0
 
         self.shm: bool = False
+
+    def _supports_extended_protocol(self) -> bool:
+        """Return whether the firmware supports the extended SPI protocol."""
+        return (
+            self.version == VERSION_26_2_4
+            or self.version >= VERSION_26_8_0
+        )
+
+    def _supports_duty_cycle_control(self) -> bool:
+        """Return whether the firmware supports duty-cycle profiles."""
+        return self.version >= VERSION_26_8_0
 
     def __enter__(self):
         return self
@@ -561,7 +575,7 @@ class Vitesse:
         Self
             The current instance for method chaining.
         """
-        if self.version < 6784:
+        if self.version < VERSION_26_8_0:
             self.excitation_clock_frequency = 50e6
         else:
             self.excitation_clock_frequency = excitation_clock_frequency
@@ -670,7 +684,7 @@ class Vitesse:
             If more than eight channels are enabled.
         """
 
-        if self.version < 6784:
+        if not self._supports_extended_protocol():
             self.num_drive_channels = range(0, self.max_channels)
             self.enabled_drive_channels = range(0, self.max_channels)
             return self
@@ -751,7 +765,7 @@ class Vitesse:
         ValueError
             If a duty cycle or chip count is invalid.
         """
-        if self.version < 6784:
+        if not self._supports_duty_cycle_control():
             return self
 
         if not 0.0 <= duty_cycle_1 <= 1.0:
@@ -811,7 +825,7 @@ class Vitesse:
         ValueError
             If the array length or a channel profile is invalid.
         """
-        if self.version < 6784:
+        if not self._supports_duty_cycle_control():
             return self
 
         if len(channel_duty_cycles) != 8:
@@ -891,7 +905,7 @@ class Vitesse:
         Self
             The current instance for method chaining.
         """
-        if self.version < 6784:
+        if not self._supports_extended_protocol():
             return self
 
         self.sampling_mode = sampling_mode
@@ -930,7 +944,7 @@ class Vitesse:
         ValueError
             If more than five counters are selected.
         """
-        if self.version < 6784:
+        if not self._supports_extended_protocol():
             return self
 
         reversed_counter_clear_mask = counter_clear_mask[::-1]
@@ -971,7 +985,7 @@ class Vitesse:
         Self
             The current instance for method chaining.
         """
-        if self.version < 6784:
+        if not self._supports_extended_protocol():
             return self
 
         if target_clock not in VALID_TARGET_CLOCKS:
@@ -1025,11 +1039,15 @@ class Vitesse:
         Self
             The current instance for method chaining.
         """
-        if self.version < 6784:
+        if not self._supports_extended_protocol():
             return self
 
-        self._write_counter_clear_mask([1, 0, 0, 0, 0, 0, 0, 0])
-        self._write_counter_clear_mask([0, 0, 0, 0, 0, 0, 0, 0])
+        if self.version == VERSION_26_2_4:
+            self._write_counter_clear_mask([0, 0, 0, 0, 0, 0, 0, 0])
+            self._write_counter_clear_mask([1, 0, 0, 0, 0, 0, 0, 0])
+        else:
+            self._write_counter_clear_mask([1, 0, 0, 0, 0, 0, 0, 0])
+            self._write_counter_clear_mask([0, 0, 0, 0, 0, 0, 0, 0])
         return self
 
     def set_averages(self, num_averages: int) -> Self:
@@ -1148,7 +1166,7 @@ class Vitesse:
         Self
             The current instance for method chaining.
         """
-        if self.version >= 6800:
+        if self.version >= VERSION_26_9_0:
             try:
                 k1 = np.float32(2 * np.pi * wheel_radius_1 / encoder_cpr_1)
                 k2 = np.float32(2 * np.pi * wheel_radius_2 / encoder_cpr_2)
@@ -1193,7 +1211,7 @@ class Vitesse:
                 return self
             except Exception:
                 return self
-        elif self.version >= 6784:
+        elif self._supports_extended_protocol():
             try:
                 wheelbase_float32 = np.float32(1 / wheelbase)
                 wheelbase_symbols = list(wheelbase_float32.tobytes())
@@ -1225,8 +1243,6 @@ class Vitesse:
 
             except Exception:
                 return self
-        elif self.version < 6784:
-            return self
         else:
             return self
 
@@ -1259,7 +1275,7 @@ class Vitesse:
             ADC sampling frequency in hertz.
         """
 
-        if self.simulation or self.version < 6784:
+        if self.simulation or not self._supports_extended_protocol():
             return DEFAULT_ADC_FREQUENCY
 
         response = self._query_spi_device(["s", "a", "a", "a", "a"], 1)
@@ -1414,7 +1430,7 @@ class Vitesse:
         Self
             The current instance for method chaining.
         """
-        if self.version < 6784:
+        if not self._supports_extended_protocol():
             return self
         if self.sampling_mode == 16:
             self.message_bytes = 2
@@ -1510,7 +1526,7 @@ class Vitesse:
             self.message_array = []
             return echo_signal
 
-        if self.version < 6784:
+        if not self._supports_extended_protocol():
             return self._get_array_legacy()
 
         if self.spi_device is None:
