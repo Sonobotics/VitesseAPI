@@ -4,7 +4,8 @@ from __future__ import annotations
 
 import math
 import struct
-from typing import TYPE_CHECKING
+from numbers import Integral
+from typing import TYPE_CHECKING, Mapping, Union
 
 import numpy as np
 
@@ -207,6 +208,117 @@ def decode_version(version_u16: int) -> list[int]:
     beta = version_u16 & 0xF
 
     return [major, minor, beta]
+
+
+def decode_packet(
+    packet: Union[bytes, bytearray, memoryview],
+    metadata: Mapping[str, object],
+) -> np.ndarray:
+    """
+    Decode a get_packet() payload without starting an acquisition.
+
+    Parameters:
+    -----------
+    packet : bytes, bytearray or memoryview
+        The complete payload returned by get_packet(). Memory views must be
+        contiguous. The input is not modified.
+    metadata : Mapping[str, object]
+        Configuration for this payload: firmware_version as [major, minor,
+        patch], record_points, message_bytes, num_averages, max_channels,
+        enabled_receive_channels as zero-based indices, and payload_bytes.
+        Additional metadata fields are ignored. JSON-decoded metadata can be
+        passed directly.
+
+    Returns:
+    --------
+    np.ndarray
+        An owned float64 waveform with shape (number of enabled channels,
+        record_points), in enabled_receive_channels order. Applies the same
+        sample conversion, averaging, ADC offset and polarity as get_array().
+
+    Raises:
+    -------
+    TypeError
+        If packet is not a contiguous byte buffer or metadata is not a mapping.
+    ValueError
+        If required metadata is missing or invalid, or the payload size does
+        not match its metadata.
+
+    Notes:
+    ------
+    No device, driver or network connection is used. Peripheral values and
+    framing bytes are skipped; no device attributes are updated. Metadata
+    must describe the configuration used to acquire this particular packet.
+    """
+    from .VitesseAPI import VERSION_26_2_4, VERSION_26_8_0
+
+    if not isinstance(metadata, Mapping):
+        raise TypeError("metadata must be a mapping")
+    try:
+        buffer = memoryview(packet)
+        if not buffer.c_contiguous:
+            raise TypeError("packet must be a contiguous byte buffer")
+        buffer = buffer.cast("B")
+    except (TypeError, ValueError) as error:
+        raise TypeError("packet must be a contiguous byte buffer") from error
+
+    def integer(value, name, minimum, maximum=None):
+        if (isinstance(value, bool) or not isinstance(value, Integral)
+                or value < minimum or (maximum is not None and value > maximum)):
+            raise ValueError(f"Invalid {name}")
+        return int(value)
+
+    points = integer(metadata.get("record_points"), "record_points", 1)
+    width = integer(metadata.get("message_bytes"), "message_bytes", 2, 3)
+    averages = integer(metadata.get("num_averages"), "num_averages", 1, 1000)
+    maximum = integer(metadata.get("max_channels"), "max_channels", 1, 8)
+    size = integer(metadata.get("payload_bytes"), "payload_bytes", 1)
+
+    firmware = metadata.get("firmware_version")
+    if not isinstance(firmware, (list, tuple)) or len(firmware) != 3:
+        raise ValueError("firmware_version must contain [major, minor, patch]")
+    major = integer(firmware[0], "firmware_version major", 0, 255)
+    minor = integer(firmware[1], "firmware_version minor", 0, 15)
+    patch = integer(firmware[2], "firmware_version patch", 0, 15)
+    version = (major << 8) | (minor << 4) | patch
+    extended = version == VERSION_26_2_4 or version >= VERSION_26_8_0
+    if not extended and width != 3:
+        raise ValueError("Legacy packets require three-byte samples")
+
+    channels = metadata.get("enabled_receive_channels")
+    if not isinstance(channels, (list, tuple)) or not 1 <= len(channels) <= maximum:
+        raise ValueError("Invalid enabled_receive_channels")
+    channels = [integer(ch, "enabled_receive_channels index", 0, maximum - 1)
+                for ch in channels]
+    if len(set(channels)) != len(channels):
+        raise ValueError("enabled_receive_channels must not contain duplicates")
+
+    stride = points * width + 2
+    # Supported firmware payloads have 29 trailer bytes after channel strides.
+    # Checking the layout as well as the saved length catches mismatched record
+    # lengths and channel counts before allocating an output array.
+    if len(buffer) != size or size != stride * len(channels) + 29:
+        raise ValueError("Packet size does not match its metadata")
+
+    words = np.ndarray(
+        (len(channels), points), buffer=buffer,
+        dtype="<u4" if not extended else (">u2" if width == 2 else ">u4"),
+        strides=(stride, width),
+    )
+    if not extended:
+        values = np.bitwise_and(words, 0xFFFFFF)
+    else:
+        values = words if width == 2 else np.right_shift(words, 8)
+    waveform = values.astype(np.float64)
+    if width == 2:
+        waveform *= 256
+    waveform /= averages
+    waveform -= 2048
+    inverted = (0, 3) if maximum <= 4 else (0, 1, 6, 7)
+    for row, channel in enumerate(channels):
+        if channel in inverted:
+            waveform[row] *= -1
+    return waveform
 
 
 def _print_config_table(

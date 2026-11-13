@@ -91,7 +91,7 @@ class Vitesse:
 
         self.version: int = 0
         self.version_array: list[int] = []
-        self.api_version: list[int] = [26, 9, 0]
+        self.api_version: list[int] = [27, 0, 0]
 
         self.internal_temperature: float = 0.0
         self.external_temperature: float = 0.0
@@ -1457,6 +1457,64 @@ class Vitesse:
         """
         return self.message_array
 
+    def get_packet(self) -> Optional[bytearray]:
+        """
+        Start an acquisition and return its packed device payload.
+
+        Returns:
+        --------
+        Optional[bytearray]
+            An owned buffer of sample bytes, remaining channel markers and
+            peripheral data, or None in simulation mode. No header, timestamp
+            or configuration metadata is added. The initial ready byte is
+            consumed by polling and is not included in the buffer.
+
+        Raises:
+        -------
+        OSError
+            If SPI is not initialised, acquisition fails, the ready-poll
+            deadline expires or a payload read is incomplete. Driver errors
+            can also propagate from the underlying connection.
+
+        Notes:
+        ------
+        Configure the device with set_config() before acquisition. Samples for
+        channel row i start at i * (record_points * message_bytes + 2).
+        Legacy samples are little-endian 24-bit values; extended samples are
+        big-endian 16-bit or 24-bit values. Callers own waveform and peripheral
+        decoding and must retain the corresponding configuration metadata.
+
+        This method does not update decoded peripheral attributes or apply
+        averaging normalisation, offset or polarity correction. get_array()
+        starts a separate acquisition rather than decoding this buffer. Use
+        decode_packet(packet, metadata) to decode the acquired buffer, and
+        get_array() for simulated data. Serialize calls on a device instance.
+        """
+        if self.simulation:
+            return None
+        if self.spi_device is None:
+            raise IOError("SPI device is not initialised")
+        size = self.total_bytes if self._supports_extended_protocol() else (self.record_points * 3 + 2) * self.num_receive_channels + 29
+        native = getattr(self.spi_device, 'acquire_packet', None)
+        result = native(self.num_averages, self.prf, size, self.read_delay, self.max_read_chunk) if native else None
+        if result is not None:
+            return result
+        self.spi_device.write(b"faaaa")
+        time.sleep(self.num_averages / self.prf)
+        deadline = time.monotonic() + 3
+        while self.spi_device.read(1) != b'\x64':
+            if time.monotonic() >= deadline:
+                raise IOError("Timed out waiting for the device packet")
+            time.sleep(self.read_delay)
+        result = bytearray()
+        while len(result) < size:
+            count = min(self.max_read_chunk, size - len(result))
+            data = self.spi_device.read(count)
+            if len(data) != count:
+                raise IOError("Incomplete device packet")
+            result.extend(data)
+        return result
+
     def get_array(self) -> np.ndarray[tuple[int, int], np.dtype[np.float64]]:
         """
         Acquire echo data and decode the accompanying peripheral values.
@@ -1532,27 +1590,47 @@ class Vitesse:
         if self.spi_device is None:
             raise IOError("SPI device is not initialised")
 
-        self.spi_device.write(b"faaaa")
-        time.sleep(self.num_averages / self.prf)
+        native_capture = getattr(self.spi_device, 'acquire_extended', None)
+        native = native_capture(self.num_averages, self.prf, self.record_points,
+            self.enabled_receive_channels, self.max_channels, self.read_delay,
+            self.max_read_chunk, self.message_bytes, self.additional_bytes - 2) if native_capture else None
+        if native is not None:
+            echo_signal, peripheral_data = native
+        else:
+            self.spi_device.write(b"faaaa")
+            time.sleep(self.num_averages / self.prf)
+            while True:
+                if self.spi_device.read(1)[0] == 100:
+                    break
+                time.sleep(self.read_delay)
 
-        response_byte = 0
-        while response_byte != 100:
-            response_chunk = self.spi_device.read(1)
-            time.sleep(self.read_delay)
-            response_byte = np.frombuffer(response_chunk, dtype=np.uint8)
+            response_bytes = bytearray()
+            remaining_bytes = self.total_bytes
+            while remaining_bytes > self.max_read_chunk:
+                response_bytes += self.spi_device.read(self.max_read_chunk)
+                remaining_bytes -= self.max_read_chunk
+            response_bytes += self.spi_device.read(remaining_bytes)
 
-        response_bytes = bytearray()
-        remaining_bytes = self.total_bytes
+            # Skip channel markers with strides rather than inserting/deleting
+            # bytes. A 24-bit word overlaps one following byte, discarded below.
+            stride = self.record_points * self.message_bytes + 2
+            words = np.ndarray((self.num_receive_channels, self.record_points),
+                dtype='>u4' if self.message_bytes == 3 else '>u2',
+                buffer=response_bytes, strides=(stride, self.message_bytes))
+            values = np.right_shift(words, 8) if self.message_bytes == 3 else words
+            echo_signal = values.astype(np.float64)
+            if self.message_bytes == 2:
+                echo_signal *= 256
+            echo_signal /= self.num_averages
+            echo_signal -= 2048
+            inversion_array = [0, 3] if self.max_channels <= 4 else [0, 1, 6, 7]
+            for i in range(self.num_receive_channels):
+                if self.enabled_receive_channels[i] in inversion_array:
+                    echo_signal[i] *= -1
+            peripheral_data = np.frombuffer(response_bytes, dtype=np.uint8,
+                offset=stride * self.num_receive_channels, count=self.additional_bytes - 2)
 
-        while remaining_bytes > self.max_read_chunk:
-            response_bytes += self.spi_device.read(self.max_read_chunk)
-            remaining_bytes -= self.max_read_chunk
-        response_bytes += self.spi_device.read(remaining_bytes)
-
-        array = np.frombuffer(response_bytes, dtype=np.uint8)
-        array = np.insert(array, 0, 100)
-
-        data_start = len(array) - 1 - self.additional_bytes + 2
+        data_start = 0
         self.message_array = []
 
         for description, decoder, byte_count in zip(
@@ -1560,10 +1638,8 @@ class Vitesse:
             self.peripheral_decoders,
             self.peripheral_byte_counts,
         ):
-            indices = np.arange(data_start, data_start + byte_count)
+            result = decoder(peripheral_data[data_start:data_start + byte_count])
             data_start += byte_count
-
-            result = decoder(array[indices])
 
             self.message_array.append(result)
 
@@ -1583,60 +1659,6 @@ class Vitesse:
                 self.position_theta = result
             elif description == "Encoder 3":
                 self.encoder_count_3 = result
-
-        indices_to_delete = np.arange(-1 * (self.additional_bytes + 1), -1)
-        array = np.delete(array, indices_to_delete)
-        arr_uint8 = array.astype(np.uint8)
-
-        def _to_binary(x: int) -> str:
-            """Convert one byte to an eight-character binary string."""
-            return format(x, "08b")
-
-        binary_strings = np.vectorize(_to_binary)(arr_uint8)
-
-        channel = np.split(binary_strings, self.num_receive_channels)
-        channel = [ch[1:-1] for ch in channel]
-
-        byte_array = np.empty(
-            (
-                self.num_receive_channels,
-                self.record_points,
-                self.message_bytes,
-            ),
-            dtype="<U8",
-        )
-        reshaped_array = np.empty(
-            (self.num_receive_channels, self.record_points), dtype=float
-        )
-        normalised_array = np.empty(
-            (self.num_receive_channels, self.record_points), dtype=float
-        )
-        echo_signal = np.empty(
-            (self.num_receive_channels, self.record_points), dtype=float
-        )
-
-        for i in range(self.num_receive_channels):
-            byte_array[i] = np.reshape(channel[i], (-1, self.message_bytes))
-            temp: list[float] = []
-            for row in byte_array[i]:
-                joined = "".join(row.tolist())
-                if self.message_bytes == 2:
-                    temp.append(bin16_to_int(joined))
-                elif self.message_bytes == 3:
-                    temp.append(bin24_to_int(joined))
-            reshaped_array[i] = np.array(temp)
-            normalised_array[i] = np.divide(
-                reshaped_array[i], self.num_averages)
-
-            if self.max_channels <= 4:
-                inversion_array = [0, 3]
-            else:
-                inversion_array = [0, 1, 6, 7]
-
-            if self.enabled_receive_channels[i] in inversion_array:
-                echo_signal[i] = np.subtract(normalised_array[i], 2048) * -1
-            else:
-                echo_signal[i] = np.subtract(normalised_array[i], 2048)
 
         return echo_signal
 
@@ -1658,6 +1680,23 @@ class Vitesse:
         """
         if self.spi_device is None:
             raise IOError("SPI device is not initialised")
+
+        self.internal_temperature = None
+        self.external_temperature = None
+        self.encoder_count_1 = None
+        self.encoder_count_2 = None
+        self.position_x = None
+        self.position_y = None
+        self.position_theta = None
+        self.encoder_count_3 = None
+
+        native_capture = getattr(self.spi_device, 'acquire_legacy', None)
+        if native_capture is not None:
+            result = native_capture(self.num_averages, self.prf, self.record_points,
+                                    self.enabled_receive_channels, self.max_channels,
+                                    self.read_delay, self.max_read_chunk)
+            if result is not None:
+                return result
 
         additional_bytes = 30
 
@@ -1685,43 +1724,19 @@ class Vitesse:
             response_bytes += self.spi_device.read(self.max_read_chunk)
         response_bytes += self.spi_device.read(remaining_bytes)
 
-        array = np.frombuffer(response_bytes, dtype=np.uint8)
-        array = np.insert(array, 0, 100)
-
-        self.internal_temperature = None
-        self.external_temperature = None
-        self.encoder_count_1 = None
-        self.encoder_count_2 = None
-        self.position_x = None
-        self.position_y = None
-        self.position_theta = None
-        self.encoder_count_3 = None
-
-        indices_to_delete = np.arange(-1 * (additional_bytes + 1), -1)
-        array = np.delete(array, indices_to_delete)
-
-        array = np.array(array, dtype=np.float16)
-
-        channel = np.split(array, self.num_receive_channels)
-        channel = [channel[1:-1] for channel in channel]
-
-        raw_sample_bytes = np.empty(
-            (
-                self.num_receive_channels,
-                self.record_points * self.message_bytes // 3,
-                3,
-            ),
-            dtype=float,
+        # Legacy firmware sends little-endian 24-bit samples. The first channel
+        # marker was consumed by the ready poll; subsequent markers are skipped
+        # by the channel stride. Read one extra byte per sample and mask it off:
+        # the final sample is followed by a channel marker, so this stays within
+        # the received buffer and avoids copying or expanding each byte.
+        samples = np.ndarray(
+            (self.num_receive_channels, self.record_points), dtype='<u4',
+            buffer=response_bytes, strides=(self.record_points * 3 + 2, 3),
         )
-        reshaped_array = np.empty(
-            (self.num_receive_channels, self.record_points), dtype=float
-        )
-        normalised_array = np.empty(
-            (self.num_receive_channels, self.record_points), dtype=float
-        )
-        echo_signal = np.empty(
-            (self.num_receive_channels, self.record_points), dtype=float
-        )
+        values = np.bitwise_and(samples, 0xFFFFFF)
+        echo_signal = values.astype(np.float64)
+        echo_signal /= self.num_averages
+        echo_signal -= 2048
 
         if self.max_channels <= 4:
             inversion_array = [0, 3]
@@ -1729,18 +1744,8 @@ class Vitesse:
             inversion_array = [0, 1, 6, 7]
 
         for i in range(self.num_receive_channels):
-            raw_sample_bytes[i] = np.reshape(channel[i], (-1, 3))
-            reshaped_array[i] = (
-                raw_sample_bytes[i][:, 0]
-                + raw_sample_bytes[i][:, 1] * (2**8)
-                + raw_sample_bytes[i][:, 2] * (2**16)
-            )
-            normalised_array[i] = np.divide(
-                reshaped_array[i], self.num_averages)
             if self.enabled_receive_channels[i] in inversion_array:
-                echo_signal[i] = np.subtract(normalised_array[i], 2048) * -1
-            else:
-                echo_signal[i] = np.subtract(normalised_array[i], 2048)
+                echo_signal[i] *= -1
 
         return echo_signal
 

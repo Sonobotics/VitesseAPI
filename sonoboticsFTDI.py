@@ -8,6 +8,7 @@ import os
 import sys
 import time
 import subprocess
+import numpy as np
 from typing import Union
 
 # =========================== importing ftd2xx drivers ===========================
@@ -82,17 +83,17 @@ def _setup_driver():
     if sys.platform.startswith("win"):
         # Copy ftd2xx.dll to system32 before loading the main library
         try:
-            lib = ctypes.CDLL(_get_resource_path("libraries/ftdiHandler.dll"))
+            lib = ctypes.CDLL(str(_get_resource_path("libraries/ftdiHandler.dll")))
         except FileNotFoundError:
             if not _copy_dll_to_system32():
                 raise FileExistsError("Error copying ftd2xx.dll over")
-            lib = ctypes.CDLL(_get_resource_path("libraries/ftdiHandler.dll"))
+            lib = ctypes.CDLL(str(_get_resource_path("libraries/ftdiHandler.dll")))
 
     elif platform.machine() == 'x86_64':
-        lib = ctypes.CDLL(_get_resource_path("libraries/ftdiHandler64.so"))
+        lib = ctypes.CDLL(str(_get_resource_path("libraries/ftdiHandler64.so")))
         os.system('sudo rmmod ftdi_sio 2>/dev/null')
     elif platform.machine() == 'aarch64':
-        lib = ctypes.CDLL(_get_resource_path("libraries/ftdiHandler.so"))
+        lib = ctypes.CDLL(str(_get_resource_path("libraries/ftdiHandler.so")))
         # Always sanitize the file first by replacing CRLF with LF
         os.system(
             f"sed -i -e 's/\r$//' {_get_resource_path('drivers/linux_arm_FTDI/unload_ftdi.sh')}")
@@ -255,6 +256,92 @@ class sonoboticsFtdiChannel(ftdiChannel):
 
         elif protocol != "UART":
             raise Exception("Invalid connection protocol")
+
+        # Optional native acquisition, supplied by the ARM bridge wrapper.
+        self._acquire_legacy = getattr(self.lib, 'acquireLegacy', None)
+        if self._acquire_legacy is not None:
+            self._acquire_legacy.argtypes = [ctypes.c_void_p, ctypes.c_uint32,
+                ctypes.c_double, ctypes.c_uint32, ctypes.c_uint32, ctypes.c_uint32,
+                ctypes.POINTER(ctypes.c_uint8), ctypes.c_double, ctypes.c_uint32,
+                ctypes.c_void_p, ctypes.c_uint32,
+                ctypes.POINTER(ctypes.c_double)]
+            self._acquire_legacy.restype = ctypes.c_int
+
+        self._acquire_extended = getattr(self.lib, 'acquireExtended', None)
+        if self._acquire_extended is not None:
+            self._acquire_extended.argtypes = [ctypes.c_void_p, ctypes.c_uint32,
+                ctypes.c_double, ctypes.c_uint32, ctypes.c_uint32, ctypes.c_uint32,
+                ctypes.POINTER(ctypes.c_uint8), ctypes.c_double, ctypes.c_uint32,
+                ctypes.c_uint32, ctypes.c_uint32, ctypes.c_void_p, ctypes.c_uint32,
+                ctypes.c_void_p, ctypes.POINTER(ctypes.c_double)]
+            self._acquire_extended.restype = ctypes.c_int
+
+        self._acquire_raw = getattr(self.lib, 'acquireRaw', None)
+        if self._acquire_raw is not None:
+            self._acquire_raw.argtypes = [ctypes.c_void_p, ctypes.c_uint32,
+                ctypes.c_double, ctypes.c_double, ctypes.c_uint32, ctypes.c_void_p,
+                ctypes.c_uint32, ctypes.POINTER(ctypes.c_double)]
+            self._acquire_raw.restype = ctypes.c_int
+
+    def acquire_packet(self, averages, prf, byte_count, read_delay, chunk):
+        """Acquire an owned, unmodified wire packet; None if native support is absent."""
+        if self._acquire_raw is None:
+            return None
+        result = bytearray(byte_count)
+        buffer = (ctypes.c_uint8 * byte_count).from_buffer(result)
+        status = self._acquire_raw(ctypes.c_void_p(self.ftHandle), averages, prf,
+                                   read_delay, chunk, ctypes.addressof(buffer), byte_count, None)
+        if status:
+            raise IOError(f"Native acquisition failed ({STATUS_MESSAGES.get(status, status)})")
+        return result
+
+    def acquire_extended(self, averages, prf, points, channel_ids, maximum,
+                         read_delay, chunk, sample_bytes, peripheral_bytes, timing=None):
+        if self._acquire_extended is None:
+            return None
+        key = (self.ftHandle, points, tuple(channel_ids), peripheral_bytes)
+        if key != getattr(self, '_extended_layout', None):
+            self._extended_layout = key
+            self._extended_ids = (ctypes.c_uint8 * len(channel_ids))(*channel_ids)
+            self._extended_handle = ctypes.c_void_p(self.ftHandle)
+            self._extended_shape = (len(channel_ids), points)
+            self._extended_count = len(channel_ids) * points
+            self._extended_peripherals = np.empty(peripheral_bytes, dtype=np.uint8)
+        result = np.empty(self._extended_shape, dtype=np.float64)
+        stages = (ctypes.c_double * 8)() if timing is not None else None
+        status = self._acquire_extended(self._extended_handle, averages, prf,
+            points, len(channel_ids), maximum, self._extended_ids, read_delay, chunk,
+            sample_bytes, peripheral_bytes, result.ctypes.data, self._extended_count,
+            self._extended_peripherals.ctypes.data, stages)
+        if status:
+            raise IOError(f"Native acquisition failed ({STATUS_MESSAGES.get(status, status)})")
+        if timing is not None:
+            timing.update(zip(('write_ms', 'average_wait_ms', 'poll_read_ms', 'poll_sleep_ms',
+                               'payload_read_ms', 'decode_ms', 'poll_count', 'payload_bytes'), stages))
+        return result, self._extended_peripherals
+
+    def acquire_legacy(self, averages, prf, points, channel_ids, maximum, read_delay, chunk, timing=None):
+        if self._acquire_legacy is None:
+            return None
+        key = (self.ftHandle, points, tuple(channel_ids))
+        if key != getattr(self, '_legacy_layout', None):
+            self._legacy_layout = key
+            self._legacy_ids = (ctypes.c_uint8 * len(channel_ids))(*channel_ids)
+            self._legacy_handle = ctypes.c_void_p(self.ftHandle)
+            self._legacy_shape = (len(channel_ids), points)
+            self._legacy_count = len(channel_ids) * points
+        # Every caller owns its array. Only immutable layout metadata is reused.
+        result = np.empty(self._legacy_shape, dtype=np.float64)
+        stages = (ctypes.c_double * 8)() if timing is not None else None
+        status = self._acquire_legacy(self._legacy_handle, averages, prf,
+            points, len(channel_ids), maximum, self._legacy_ids, read_delay, chunk,
+            result.ctypes.data, self._legacy_count, stages)
+        if status:
+            raise IOError(f"Native acquisition failed ({STATUS_MESSAGES.get(status, status)})")
+        if timing is not None:
+            timing.update(zip(('write_ms', 'average_wait_ms', 'poll_read_ms', 'poll_sleep_ms',
+                               'payload_read_ms', 'decode_ms', 'poll_count', 'payload_bytes'), stages))
+        return result
 
     # writes bytes, bytearray, int or str to device
 

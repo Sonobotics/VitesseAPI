@@ -1,5 +1,7 @@
 # SONUS Vitesse Python API
 
+API version: **27.0.0**. The API version is independent of the connected device's firmware version.
+
 The SONUS Vitesse Python API is a high-performance interface designed to integrate and control the Sonobotics SONUS Vitesse data acquisition system through Python. The API enables users to configure the device, acquire ultrasonic data, read peripheral information and work with the integrated encoder system.
 
 ## Table of Contents
@@ -28,6 +30,8 @@ The SONUS Vitesse Python API is a high-performance interface designed to integra
 The SONUS Vitesse Python API provides a comprehensive interface for the SONUS Vitesse data acquisition system. It supports device discovery, excitation and acquisition configuration, multi-channel operation, amplitude steering, encoder configuration, peripheral decoding and simulated data acquisition.
 
 The API supports 1, 2, 4 and 8-channel SONUS Vitesse devices. Channel configuration arrays always contain eight values, with unused channels set to `0`.
+
+Version 27.0.0 adds packed acquisition with `get_packet()` and offline waveform decoding with `VitesseAPI.utils.decode_packet()`. It also improves numeric waveform decoding and adds optional native ARM64 acquisition through the included FTDI library. Existing method names and signatures remain available.
 
 ## Installation
 
@@ -290,7 +294,7 @@ set_config(
 - `sampling_mode`: ADC sample width. Use `16` for two-byte samples or `24` for the default three-byte samples.
 - `excitation_clock_frequency`: Excitation clock frequency in Hz.
 - `excitation_frequency`: Requested excitation frequency in Hz.
-- `target_clock`: Requested ADC clock frequency in Hz. The nearest supported value of 25 or 50 Hz is selected.
+- `target_clock`: Requested ADC clock frequency in Hz. The nearest supported value of 25 or 50 MHz is selected.
 - `polarity`: Excitation polarity code sent to the FPGA. The default is `"p"`.
 - `duty_cycle_1`: First duty-cycle profile from `0.0` to `1.0`.
 - `duty_cycle_2`: Second duty-cycle profile from `0.0` to `1.0`.
@@ -482,6 +486,7 @@ Acquires echo data for every enabled receive channel and decodes the peripheral 
 
 - A two-dimensional NumPy array with shape `(num_receive_channels, record_points)`.
 - Each row contains the samples from one enabled receive channel.
+- The array uses `float64` values, with averaging normalisation, the ADC offset and channel polarity correction applied.
 
 ```python
 data = vitesse.get_array()
@@ -491,6 +496,72 @@ print(f"First enabled channel: {data[0]}")
 ```
 
 Calling `get_array()` also updates the peripheral attributes described under [Common Device Attributes](#common-device-attributes).
+
+#### `get_packet() -> Optional[bytearray]`
+
+Starts a new acquisition and returns the packed device payload without decoding the waveform samples or peripheral values. Use this method when storing or forwarding device bytes for decoding later. Use `get_array()` when a decoded NumPy waveform is required.
+
+**Returns:**
+
+- An independently owned `bytearray` containing sample bytes, remaining channel markers and the peripheral trailer. Later acquisitions do not overwrite this buffer.
+- `None` in simulation mode. Use `get_array()` to acquire simulated waveforms.
+
+The initial ready byte (`0x64`) is consumed while waiting for the device and is not included in the returned payload. The API does not add a header, timestamp, channel identifiers or configuration information. The returned bytes are not a self-describing capture file.
+
+```python
+import json
+from pathlib import Path
+from VitesseAPI import Vitesse
+
+with Vitesse().initialise() as vitesse:
+    vitesse.set_config(
+        excitation_frequency=3.6e6,
+        num_cycles=2,
+        drive_channels=[1, 0, 0, 0, 0, 0, 0, 0],
+        receive_channels=[1, 0, 0, 0, 0, 0, 0, 0],
+        num_averages=100,
+        prf=1000,
+        record_length=50e-6,
+    )
+
+    packet = vitesse.get_packet()
+    if packet is not None:
+        metadata = {
+            "api_version": list(vitesse.api_version),
+            "firmware_version": list(vitesse.version_array),
+            "adc_frequency": vitesse.adc_frequency,
+            "record_points": vitesse.record_points,
+            "message_bytes": vitesse.message_bytes,
+            "num_averages": vitesse.num_averages,
+            "prf": vitesse.prf,
+            "max_channels": vitesse.max_channels,
+            "enabled_receive_channels": list(vitesse.enabled_receive_channels),
+            "payload_bytes": len(packet),
+        }
+        Path("capture.bin").write_bytes(packet)
+        Path("capture.json").write_text(json.dumps(metadata, indent=2))
+```
+
+Configure the device with `set_config()` before acquisition so that packet sizes match the selected channels, record length and sampling mode. Keep the configuration metadata with stored payloads; these values cannot be recovered from the payload alone.
+
+**Packet layout:**
+
+- Samples are ordered by the zero-based channel indices in `enabled_receive_channels`.
+- For channel row `i`, samples start at offset `i * (record_points * message_bytes + 2)`. Read `record_points * message_bytes` sample bytes from that offset; the remaining bytes contain channel framing and peripheral data.
+- Legacy firmware uses little-endian, three-byte samples. Extended-protocol firmware uses big-endian samples with two or three bytes according to the configured sampling mode.
+- The sample bytes still represent the device's accumulated ADC values. `get_packet()` does not divide by `num_averages`, subtract the ADC offset or correct channel polarity. It does not apply filtering, rectification or thickness calculations.
+- The peripheral trailer depends on the firmware. Retain it when forwarding or storing packets rather than treating the entire payload as contiguous waveform samples.
+
+Calling `get_packet()` leaves `message_array`, temperature, encoder and position attributes unchanged. Consequently, `get_peripheral_data()` still returns the values from the latest decoded acquisition. A subsequent call to `get_array()` starts another acquisition; it does not decode the packet already returned by `get_packet()`. Use `decode_packet(packet, metadata)` to decode the existing packet.
+
+**Raises:**
+
+- `OSError` if the SPI device is not initialised, a native acquisition fails, the ready-poll deadline expires or a payload read is incomplete.
+- Other device-driver errors may propagate from the underlying SPI connection.
+
+The method blocks while acquisition and reads complete. The ready-poll deadline is three seconds after the averaging wait, checked between read operations; it is not a fixed timeout for the whole call. Driver read timeouts also apply. Serialize acquisition and configuration calls on each device instance.
+
+Both `get_array()` and `get_packet()` are available on Windows, Linux AMD64 and Linux ARM64. The supplied ARM64 FTDI library performs acquisition in C++ through optional native entry points. Windows and AMD64 currently coordinate acquisition in Python using native SPI reads. If those optional entry points are absent, the API uses the Python acquisition path. The native libraries are included in the API; the separate QUANTA Radxa server is not required to use these methods.
 
 #### `get_peripheral_data() -> list`
 
@@ -540,6 +611,58 @@ The supported range is 0 to 20000 minutes. The command is skipped when `vitesse.
 ### Utility Functions
 
 The utility functions are available from `VitesseAPI.utils`.
+
+#### `decode_packet(packet: bytes | bytearray | memoryview, metadata: Mapping) -> np.ndarray`
+
+Decodes the waveform in an existing `get_packet()` payload. This standalone function does not connect to a device or start an acquisition. Import it from `VitesseAPI.utils`.
+
+**Parameters:**
+
+- `packet`: The complete payload returned by `get_packet()`, or its saved bytes. Memory views must be contiguous.
+- `metadata`: The configuration used to acquire this specific packet. The JSON metadata saved in the preceding example can be passed directly.
+
+The following metadata fields are required:
+
+| Field | Description |
+|---|---|
+| `firmware_version` | Firmware version as `[major, minor, patch]` |
+| `record_points` | Positive number of samples per enabled receive channel |
+| `message_bytes` | Sample width: `3` for legacy firmware, `2` or `3` for extended firmware |
+| `num_averages` | Number of averaged acquisitions, from 1 to 1000 |
+| `max_channels` | Maximum channel count for the device, from 1 to 8 |
+| `enabled_receive_channels` | Unique zero-based channel indices in the payload's row order |
+| `payload_bytes` | Complete payload length recorded when the packet was acquired |
+
+Additional fields, including `api_version`, `adc_frequency` and `prf`, are accepted and ignored by the waveform decoder.
+
+**Returns:**
+
+- An independently owned `float64` NumPy array with shape `(len(enabled_receive_channels), record_points)`.
+- The same sample scaling, averaging normalisation, ADC offset and channel polarity correction as `get_array()` for the corresponding packet.
+
+To decode the files saved in the preceding example:
+
+```python
+import json
+from pathlib import Path
+from VitesseAPI.utils import decode_packet
+
+packet = Path("capture.bin").read_bytes()
+metadata = json.loads(Path("capture.json").read_text())
+waveform = decode_packet(packet, metadata)
+
+print(f"Data shape: {waveform.shape}")
+print(f"First enabled channel: {waveform[0]}")
+```
+
+For an in-memory acquisition, pass `packet` and `metadata` directly to `decode_packet()` without writing files. The decoder does not modify either argument, and later changes to a mutable packet buffer do not change the returned array.
+
+The decoder supports legacy 24-bit packets and extended 16/24-bit packets with the standard peripheral trailer used by this API. Peripheral values are skipped and device attributes are not updated. No filtering, rectification or thickness calculation is applied. The function checks required metadata and payload length; it does not infer missing settings or verify the contents of framing and peripheral bytes.
+
+**Raises:**
+
+- `TypeError` if `packet` is not a contiguous byte buffer or `metadata` is not a mapping.
+- `ValueError` if required metadata is missing or invalid, or the packet length is inconsistent with its configuration.
 
 #### `get_version(vitesse: Vitesse) -> None`
 
